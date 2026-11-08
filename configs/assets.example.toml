@@ -1,0 +1,9 @@
+# Bootstrap 模板。实际资产通过 COPATCH_ASSETS_ROOT 与相对路径定位。
+[assets.main_qwen]
+logical_path = "models/main_qwen"
+
+[assets.frozen_sub]
+logical_path = "models/frozen_sub"
+
+[assets.coding_preflight]
+logical_path = "datasets/raw/preflight"

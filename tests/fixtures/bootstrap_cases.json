@@ -1,0 +1,38 @@
+{
+  "task": {
+    "schema_version": 1,
+    "task_id": "smoke_count_positive",
+    "split": "smoke",
+    "task_family": "count_positive",
+    "difficulty": "easy",
+    "kind": "function_impl",
+    "description": "Count the strictly positive numbers in the input list.",
+    "entrypoint": "solution:count_positive",
+    "allowed_files": ["solution.py"],
+    "initial_snapshot": "fixture-source-01",
+    "public_suite_id": "fixture-public-01",
+    "private_suite_id": "fixture-private-id-only",
+    "source_revision": "handwritten-fixture-v1",
+    "budget": {
+      "max_main_steps": 4,
+      "max_sub_calls": 2,
+      "max_public_tests": 1,
+      "max_code_revisions": 1,
+      "max_generated_tokens": 256,
+      "wall_time_seconds": 30
+    }
+  },
+  "actions": [
+    {"tool_name": "read_file", "arguments": {"path": "solution.py"}},
+    {"tool_name": "read_file", "arguments": {"wrong_key": "solution.py"}},
+    {"tool_name": "run_shell", "arguments": {}}
+  ],
+  "observation": {
+    "status": "ok",
+    "summary": "Fixture contents for solution.py",
+    "code_hash": "fixture-code-hash",
+    "remaining_steps": 3,
+    "elapsed_ms": 0,
+    "data": {"path": "solution.py"}
+  }
+}

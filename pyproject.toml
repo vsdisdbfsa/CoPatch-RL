@@ -1,0 +1,31 @@
+[project]
+name = "copatch-rl"
+version = "0.1.0"
+description = "A coding-agent harness and Main-only orchestration research project"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = ["pydantic>=2.10,<3"]
+
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = ["pytest>=8.3,<10", "ruff>=0.15,<1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
