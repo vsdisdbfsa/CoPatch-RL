@@ -1,9 +1,52 @@
-# Bootstrap 模板。实际资产通过 COPATCH_ASSETS_ROOT 与相对路径定位。
+# V2.1 Bootstrap 模板。实际资产通过 COPATCH_ASSETS_ROOT 与相对路径定位。
+# 空值待资产预检填写。正式运行需要已核验的来源、revision 与校验和。
 [assets.main_qwen]
 logical_path = "models/main_qwen"
+model_family = "Qwen"
+parameter_target = "4B"
+model_id = ""
+revision = ""
+checksum = ""
 
 [assets.frozen_sub]
 logical_path = "models/frozen_sub"
+model_id = ""
+revision = ""
+checksum = ""
+
+# 本地角色可共享权重，Prompt、Context、Session 和 KV 缓存分别管理。
+[local.role_assets]
+main = "main_qwen"
+planner = "frozen_sub"
+coder = "frozen_sub"
+reviewer = "frozen_sub"
+
+[assets.mbpp]
+source = "google-research-datasets/mbpp"
+logical_path = "datasets/raw/mbpp"
+revision = ""
+checksum = ""
+
+[assets.mbpp_plus]
+source = "evalplus/mbppplus"
+logical_path = "datasets/raw/mbppplus"
+revision = ""
+checksum = ""
+
+[assets.swe_smith]
+source = "SWE-bench/SWE-smith-py"
+logical_path = "datasets/raw/swe_smith"
+revision = ""
+checksum = ""
+
+[assets.swe_gym]
+source = "SWE-Gym/SWE-Gym"
+logical_path = "datasets/raw/swe_gym"
+revision = ""
+checksum = ""
+enabled = false
 
 [assets.coding_preflight]
 logical_path = "datasets/raw/preflight"
+revision = ""
+checksum = ""

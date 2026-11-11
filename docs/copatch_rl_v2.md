@@ -2,9 +2,11 @@
 
 > **CoPatch-RL: Learning to Orchestrate Coding Agents via Reinforcement Learning**  
 > **副标题：** 基于可验证执行反馈的动态多智能体编程协作与 Main Agent 策略优化  
-> **版本：** V2.0（工程协作修订版，2026-11-08）　**目标交付：** 2026-12-02　**团队：** 3 人　**新增现金预算上限：** ¥300（待实测后调整配置，不能擅自突破）  
+> **版本：** V2.1（模型、数据与训练实施修订，2026-11-11）　**目标交付：** 2026-12-02　**团队：** 3 人　**新增现金预算上限：** ¥300\
 > **定位：** 三人协作的 Coding Agent 工程、Agentic RL 训练与可复现评测；支持真实在线 LLM API  
 > **状态说明：** 本文件是设计/实施方案，**不是已完成报告**。任何训练效果、耗时、费用、命令或指标，除非有对应运行记录，都属于目标、建议或待验证假设。
+>
+> **已确定：** 正式 Main 目标为 Qwen 4B，只训练 Main LoRA；MBPP/MBPP+ 保留，引入 SWE-smith。**规划目标：** SFT、GRPO、Dev 和 Test 数量见第 7 章。**待验证：** 具体模型仓库与 revision、三源配比、训练兼容性、仓库可复现率和全规模成本。
 
 ---
 
@@ -30,7 +32,7 @@
                                         ▼
                         ┌────────────────────────────────┐
                         │       Main Orchestrator        │
-                        │   Qwen Base (Frozen) + LoRA    │
+                        │    Qwen 4B (Frozen) + LoRA     │
                         │       仅 Main 接受训练          │
                         └───────────────┬────────────────┘
                                         │ 自主选择 Action
@@ -68,12 +70,12 @@
 
 | 层次 | 组件 | 一句话职责 | 代码归属 | 首次形成 |
 |---|---|---|---|---|
-| 策略 | Main Qwen + LoRA | 选择工具/委派/终止；**唯一训练对象** | A：`training/`；B：`agents/main.py` | Stage 1 代码、Stage 2 训练 |
+| 策略 | Main Qwen 4B + LoRA | 选择工具/委派/终止；**唯一训练对象**；仓库与 revision 待选 | A：`training/`；B：`agents/main.py` | Stage 1 代码、Stage 2 训练 |
 | 角色 | Planner / Coder / Reviewer | 规划 / 修改代码 / 审查；全程冻结 | B：`agents/` | Stage 1 |
 | 运行时 | Loop / Tool / Session / Context | 控制多轮动作、上下文、预算与恢复 | B：`core/ harness/` | Stage 1 |
 | 模型适配 | Local Qwen / Hybrid API | 相同接口切换本地冻结模型与在线模型 | B：`models/`；A：训练校验 | Stage 1 |
 | 执行 | Workspace / Docker / Grader | 文件白名单、公开反馈、可信隐藏评分 | C：`execution/` | Stage 1 |
-| 数据 | MBPP 转换 / 自建工程题 / Teacher 轨迹 | 产出真实任务、监督样本和评分资产 | C：`data/`；A：SFT 协议 | Stage 1 代码、Stage 2 数据 |
+| 数据 | 函数 / 仓库 TaskSpec、Teacher 轨迹、GRPO Rollout | 统一接口接入 MBPP 与 SWE-smith；SWE-Gym 待审；三种资产分别登记 | C：`data/`；A：SFT 协议 | Stage 1 代码、Stage 2 数据 |
 | 优化 | SFT / GRPO / Checkpoint | 只更新 Main LoRA，记录概率、mask 和权重 | A：`training/` | Stage 1 代码、Stage 2 实训 |
 | 评测 | Single/Fixed/SFT/RL + 报告 | 统一条件下的正确率、成本与行为变化 | C：`evaluation/`；A：方法审查 | Stage 1 代码、Stage 3 正式结果 |
 | 应用 | CLI / 轻量 Web | 演示真实在线协作与结果回放 | B：`app/` | Stage 1 |
@@ -91,9 +93,10 @@
 | **Stage 1** | **JSONL Event Store**（追加日志，非关系型数据库） | 逐行保存工具动作、Sub 输出、代码 hash 与错误；**原始事件为可回放依据**，SQLite 是可重建索引 | `artifacts/traces/*.jsonl`，仅脱敏示例入 Git |
 | **Stage 1** | Workspace / Snapshot 文件 | 存当前候选代码、diff、提交快照；不应塞入数据库 BLOB | `workspaces/`、`artifacts/snapshots/`，不提交 |
 | **Stage 1 合并后** | 模型资产索引与本地目录 | 负责人统一下载一次做接口验收，登记模型 revision、hash、逻辑路径和下载命令；每位成员在自己的设备单独下载 | `docs/ASSET_REGISTRY.md`、`configs/assets.example.toml` 入 Git；真实权重与本地设备路径不入 Git |
-| **Stage 2** | **MBPP / MBPP+** | 公开 Python 编程题及增强测试；用于训练/验证/函数级保留集，必须核对源数据划分和版本 | `datasets/raw/` 不提交；`datasets/manifests/*.jsonl` 可提交 |
-| **Stage 2** | 自建 Python 小工程集 | 数据处理、日志和配置任务，补足多步协作/审查价值 | 审核过的任务规格、允许公开的样例可提交，私测隔离 |
-| **Stage 2** | SFT 轨迹 / GRPO Rollout | Main 决策样本；真实 token / logprob / mask / reward；体量较大可用 `.npz` / Parquet（列式数据格式，可选） | `artifacts/traces/`、`artifacts/datasets/`，默认不提交大文件 |
+| **Stage 2** | **MBPP / MBPP+** | MBPP 提供函数级训练与开发任务；MBPP+ 增强用例用于函数级保留评测 | `datasets/raw/` 不提交；`datasets/manifests/*.jsonl` 只提交允许公开的字段 |
+| **Stage 2** | **SWE-smith** / SWE-Gym（待审） | Python 仓库修复；固定缺陷快照、依赖镜像和评分协议 | 快照、镜像与私测单独管理；不提交原始补丁或环境缓存 |
+| **Stage 2** | SFT 监督轨迹 / GRPO Rollout | 规划约 1,000 道任务、2,000 条 Teacher 轨迹；约 800 道任务、3,200 条新采样 Rollout | 分开登记完整轨迹、Main 决策样本和有效 token；大文件不入 Git |
+| **Stage 3** | 自建 12 道小工程题 | 保留为探索性案例，单独报告 | 可公开样例可提交，私测隔离 |
 | **Stage 3** | Eval 结果 JSONL / CSV | 同一任务逐组结果、统计汇总、失败案例和绘图输入 | `artifacts/eval/`，提交脱敏小型摘要与复现脚本 |
 
 **数据库决策：只要求 SQLite + JSONL + 文件系统。** Stage 1 实现 `schema_version`、初始化/迁移和断点恢复；SQLite 保存元数据与可重建查询索引，JSONL 保存原始事件，模型权重、源代码和大张量留在文件系统。**不需要 PostgreSQL、Redis、向量数据库、RAG 或云数据库。** 若一次写入中断，以已完整写入的事件记录为准恢复索引，不能假定 SQLite 和 JSONL 具有跨文件原子事务。
@@ -135,6 +138,8 @@
 |---|---|---|---|
 | **MBPP** | 小型、带测试的 Python 编程题 | Train/Dev 的基础题目池，构造短任务 | 普通函数题未必体现 Planner/Reviewer 的价值 |
 | **MBPP+** | 对 MBPP 部分题目的测试增强 | 函数级可信保留评测的一部分 | 需按源 MBPP ID 交集划分，不能直接相信数据集 `test` 字段 |
+| **SWE-smith** | 通过合成缺陷构造的仓库修复题 | 仓库级 Train/Dev 与按仓库隔离的正式 Test | 原始 `patch` 注入缺陷；测试需独立审核 |
+| SWE-Gym（待审） | 真实 issue/PR 衍生的仓库修复题 | 建议配比中的训练来源；按审计结果纳入 | 它的 `patch` 才是参考修复；与 SWE-smith 跨来源去重 |
 | **自建 12 个小工程题** | 数据、日志、配置各 4 个审核任务 | 检验多文件协作、修改与恢复策略 | 样本小，只作探索性工程迁移报告 |
 | **Smoke/Dev Fixtures** | `count_positive` 等少量手写任务 | Stage 1 不下载任何真实模型就验证接口 | **不能算最终泛化成绩** |
 | SWE-bench 系列（仅参考） | 真实仓库 issue 级修复基准 | 借鉴隔离、测试可信性、污染审计思想 | 本期不强制跑完整 SWE-bench |
@@ -160,7 +165,7 @@ Stage 3（A/B/C 三人并行）
                            ↓ 负责人最终审查合并与归档
 ```
 
-**协作约束：** 一个主仓库、每人独立 `git worktree` + 分支、不同文件夹所有权；三人不在同一工作目录运行 Codex，也不直接向主分支推送。**Stage 1 是“全部代码完成”，不是“训练全部完成”；Stage 2 才下载后运行真实训练。** 权重不随 Git clone 分发，所有成员按资产登记自行下载。第 17–19 章附有分工、Prompt 与合并门槛。
+**协作约束：** 一个主仓库、每人独立 `git worktree` + 分支、不同文件夹所有权；三人不在同一工作目录运行 Codex，也不直接向主分支推送。**Stage 1 工作分支不下载；代码合并后由 A 接入受控资产做预检，Stage 2 才开展正式训练。** 权重不随 Git clone 分发，所有成员按资产登记自行下载。第 17–19 章附有分工、Prompt 与合并门槛。
 
 ---
 
@@ -259,9 +264,10 @@ Stage 3（A/B/C 三人并行）
 | 编排方式 | 强约束固定三角色流程 | **Main 动态调用**；固定流程只作基线 |
 | RL 优化目标 | 代码生成/修复决策 | **委派、测试、协作与停止策略**，最终仍以 Coding 成功衡量 |
 | 模型运行 | 本地/在线混合的旧角色分配 | **Local：本地 Main+本地 Frozen Sub；Hybrid：本地 Main+在线 Frozen Sub** |
-| 仓库 | 独立工程 | **新建仓库，选择性借鉴 其他仓库**，不把其作为运行依赖 |
+| 仓库 | 独立工程 | CoPatch-RL 自包含，按本项目依赖锁与配置复现 |
 | Harness | 工具与工作流为主 | 加入**Session/Context/Event/Checkpoint** 最小完整闭环 |
-| 模型候选 | Qwen3-0.6B | 0.6B 用于烟测；正式优先试 1.7B / Qwen3.5-2B（兼容/费用门槛） |
+| Main 模型 | V2.0 以更小底座为正式候选 | **Qwen 4B 为正式目标**；具体仓库/revision 待选，小模型只作连通性试点 |
+| 数据与规模 | 以函数题与自建题为主 | MBPP/MBPP+ 加 SWE-smith；目标与配比见第 7 章，实测后冻结执行规模 |
 | 评测 | Coder SFT/继续SFT/协作RL 四组 | **单 Agent / 固定 MAS / 动态 SFT / 动态 GRPO**；继续 SFT 作为补充控制 |
 
 > **重要：** 以后如参考原始文档，请以上表为准。原版中的“只训 Coder”“提交前必须审查”等约束不能直接带进新版动态编排，否则会削弱研究对象。
@@ -401,9 +407,9 @@ Sub-Agent **冻结参数，不等于固定答案**：它们会随任务和可见
 
 它不是“LLM 调一个工具”这么简单。**一个能服务 Agentic RL 的最小 Harness，必须支持有状态交互、角色上下文隔离、可控执行、事件回放、精确训练轨迹。** 但不需要跨会话终身记忆、分布式消息总线和复杂数据库。
 
-### 4.2 从 其他仓库 选择性继承
+### 4.2 Harness 机制的复用边界
 
-| 旧项目机制 | 处理方式 | 本项目新增要求 |
+| 工程机制 | 处理方式 | 本项目要求 |
 |---|---|---|
 | Agent Loop / ReAct | 保留思想、按新契约改写 | Main 每步可委派不同角色，按工具观察继续 |
 | Tool Calling / Dispatcher | 优先审查后迁移 | 类型化入参、权限、预算、完整动作追踪 |
@@ -412,7 +418,7 @@ Sub-Agent **冻结参数，不等于固定答案**：它们会随任务和可见
 | 任务调度/固定工作流 | **重新设计** | 动态委派由 Main 决策、固定版单独基线 |
 | MCP | 留适配层 | 本期最小 CLI 不依赖外部 MCP 服务 |
 
-独立项目不通过 `sys.path`、符号链接、`pip install -e ../其他仓库` 运行；以项目自身源码及依赖锁可在干净目录重建为验收标准。
+CoPatch-RL 以自身源码和依赖锁在干净目录重建；不靠本地相邻目录或符号链接提供运行依赖。
 
 ### 4.3 Agent Loop 与 Harness 的关系
 
@@ -462,7 +468,7 @@ JSONL 逐事件追加，至少包含：`event_id, episode_id, session_id, parent
 
 ### 4.8 Workspace / Checkpoint
 
-每局创建 `workspaces/<episode_id>/project`，保存源文件白名单、原始快照、每次修改 hash、提交时最终快照。训练检查点另存 `base_revision + adapter + optimizer + scheduler + sampler_state + rng_state + global_step + config`。**工作区快照与模型检查点是两类不同资源**；其关联以 `episode_id / policy_version` 为键。
+每局创建 `workspaces/<episode_id>/project`，保存源文件白名单、原始快照、每次修改 hash、提交时最终快照。仓库任务由可信宿主还原已登记的缺陷快照，再创建独立工作区，见第 6 章。模型检查点另存，格式见第 11 章。**工作区快照与模型检查点是两类不同资源**；其关联以 `episode_id / policy_version` 为键。
 
 ### 4.9 完成标准
 
@@ -472,6 +478,10 @@ JSONL 逐事件追加，至少包含：`event_id, episode_id, session_id, parent
 - 同一训练采样记录的 Main 原始 token/旧概率能与真实上下文对应；
 - 非法路径、非法工具、超时、耗尽预算均有明确状态。
 
+### 4.10 应用扩展：由 Main 澄清需求（可选）
+
+只在交互式应用中，Main 遇到会改变交付结果的歧义时可调用 `ask_user(question)`。应用保存当前快照和待答状态；用户回答作为新的公开事件进入同一 Main Session，超时或取消则保留明确的结束状态。Planner/Reviewer 只能在角色观察中建议澄清，不能直接打断用户。**自主训练、Teacher 批量采样、Dev 和正式 Benchmark 都使用预先完整确定的任务输入，且不注册此工具。** 该扩展不影响 Stage 1 必做范围或本期 RL 主实验。
+
 ---
 
 <a id="ch5"></a>
@@ -480,25 +490,24 @@ JSONL 逐事件追加，至少包含：`event_id, episode_id, session_id, parent
 
 ### 5.1 简单说明
 
-**Main 是小模型政策网络，Sub-Agent 是被冻结的专业执行器。** CoPatch-RL 要求真实在线 LLM，因此不必把所有模型都放在本地：使用同一 Harness 切换 Sub 后端即可。
+**Main 用 Qwen 4B 负责决策，三个冻结 Sub-Agent 负责执行委派。** Local 与 Hybrid 共用同一 Harness 和 Main；切换的是 Sub 后端。
 
 | 模式 | Main | Planner / Coder / Reviewer | 用途 | 是否参与正式 RL |
 |---|---|---|---|---|
-| Local | Qwen + Main LoRA | 本地冻结小模型，可共用模型权重但上下文独立 | 训练、算法与统计对照 | **是，优先** |
-| Hybrid | 同一 Main / 训练后 LoRA | 真实在线 DeepSeek 或 GLM API | 在线应用与迁移对照 | 初期否，另行试点后才能训练 |
+| Local | 冻结 Qwen 4B + Main LoRA | 本地冻结模型，可共用权重，Prompt、Context、Session 各自独立 | 训练与主对照 | **是** |
+| Hybrid | 同一 Qwen 4B + 对应 Main LoRA | 真实在线 DeepSeek 或 GLM API | 在线应用与单独的迁移对照 | 本期不纳入 |
 
 如果本地三个 Frozen Sub 不具备完成代码任务的最低能力，Main 会得到大量全零奖励。**先测 Sub-Agent 的独立可用性与不同协作路径之间是否有质量差异，再决定正式 RL 规模。**
 
 ### 5.2 模型候选与选择门槛
 
-| 层次 | 候选 | 用途 | 启用条件 |
-|---|---|---|---|
-| 冒烟 | Qwen3-0.6B | 工具格式、LoRA 改变、训练链路连通 | 少量任务合法调用与梯度验证 |
-| 主基线 | Qwen3-1.7B | 较可控的文本模型训练 | LoRA + TRL + 4090/MPS 试点成功 |
-| 优先探索 | Qwen3.5-2B | Main 正式候选 | **先核实架构、Transformers/PEFT/TRL 支持、LoRA target_modules 与重载** |
-| 备用升级 | 4B | 2B 无法有效决策时考虑 | 预算和显存允许，且原配置已可复现 |
+| 用途 | 决策 / 状态 | 加载与启用门槛 |
+|---|---|---|
+| 正式 Main | **Qwen 4B；具体仓库、变体、revision 待选** | 按选中模型卡和 `config` 确认加载类、dtype、tokenizer 与 chat/tool template；检查真实工具调用、原始 token、反传和重载 |
+| 本地 Frozen Sub | 型号与部署位置待试点 | 三角色可共享同一权重实例；隔离 Prompt、Context、Session 与 KV 缓存；禁止读 Main LoRA 或进入优化器 |
+| 连通性试点 | FakeClient、小模型或合成张量 | 用于格式、mask、梯度链路调试；不替代 4B 的兼容性、性能或正式结论 |
 
-Qwen3.5-2B 的公开模型卡可能涉及混合架构与多模态模型用法；**不要未经检查就把所有 Qwen3.5 模型当成与 Qwen3 文本 CausalLM 完全相同的类、tokenizer 和 LoRA 注入点**。我们只需要文本统筹，但训练实现要按对应架构核对。
+正式配置必须同时指定模型仓库、不可变 revision 与资产校验和。占位或不匹配时显式阻断正式加载，不自动回退。试点用锁定的 PyTorch、Transformers、PEFT、TRL 验证实际架构；仅在实测通过后启用特定注意力后端、量化或远程模型代码。LoRA 目标模块按实际模型层名核查，不能从不同架构的示例照搬。
 
 ### 5.3 ModelClient 统一协议
 
@@ -535,7 +544,7 @@ Qwen3.5-2B 的公开模型卡可能涉及混合架构与多模态模型用法；
 | F：函数实现 | 单文件 stub + 函数签名 | 正确函数 | SFT/GRPO 起步与算法定位 |
 | B：边界与错误修复 | 有缺陷的代码 + 失败测试 | 修正代码，不引入回归 | 协作反馈和 Reviewer 价值 |
 | M：小型多文件项目 | 2–5 个文件与约束 | 可运行项目及测试 | 强度更高的工程保留集 |
-| R：小仓库定位修改（可选） | 受限小型 repo | 最小补丁和回归测试 | 迁移到 repo-level 任务的探索 |
+| R：仓库级修复 | 固定的缺陷仓库快照与依赖环境 | 可独立应用和验证的候选补丁 | SWE-smith 正式训练与仓库级评测；SWE-Gym 待审核 |
 
 **不能让难度仅靠代码行数衡量。** 应记录：文件数、需求条款、异常分支、输入类型、测试覆盖、任务描述歧义、跨文件依赖、典型首版错误率。简单题用于确保模型没有退化，中档题用于观察协作增益，困难题用于评估能力上界。
 
@@ -548,6 +557,7 @@ Qwen3.5-2B 的公开模型卡可能涉及混合架构与多模态模型用法；
   "task_family": "count_positive",
   "difficulty": "easy",
   "kind": "function_impl",
+  "source_revision": "<PINNED_DATASET_REVISION>",
   "description": "统计有限实数列表中严格大于0的元素个数，空列表返回0",
   "entrypoint": "solution:count_positive",
   "allowed_files": ["solution.py"],
@@ -567,11 +577,30 @@ Qwen3.5-2B 的公开模型卡可能涉及混合架构与多模态模型用法；
 
 `private_suite_id` 是**宿主评分器持有的索引**，不进入任何模型输入、工具 schema 或候选文件系统。`TaskSpec` 在宿主与模型视图之间要有明确的 `public_view()`，绝不可把完整 JSON 原样当 Prompt。
 
+#### i、仓库级 TaskSpec
+
+接入层把原始数据行转换成同一份 TaskSpec，Harness 仍只接收公开任务和工具反馈。函数题提供函数签名与 stub，仓库题提供缺陷描述与可读源码；同一接口不要求两类题采用同一种测试方法。
+
+| 边界 | 仓库级字段示意 | 用途 |
+|---|---|---|
+| 模型公开视图 | `task_id, kind=repo_repair, description, entrypoint, allowed_files, public_suite_id, budget` | 提供可操作的任务、入口和修改范围；通过工具读取当前仓库 |
+| 宿主任务记录 | `origin, origin_revision, upstream_instance_id, repo_family, problem_family, split, initial_snapshot` | 固定来源、划分和初始状态 |
+| 可信恢复记录 | `upstream_repo, checkout_ref, resolved_commit, snapshot_hash, image_digest, platform, dependency_lock_hash, runner_version` | 明确在哪个提交、镜像和测试适配器上运行；数据没有直接给出 commit 时由可信适配器解析并核验 |
+| 评分私有记录 | `private_suite_id, private_suite_hash, reference_ref, expected_baseline, test_ids` | 存放参考恢复方式、预期首版失败、独立用例与版本；不进入 Agent 文件系统或上下文 |
+
+字段可放在 TaskSpec 的宿主部分或关联 Manifest；上表是拟议扩展。当前公开视图以契约 v1 为准，公开 `kind` 属于待审核扩展。A 审核公共契约变更，C 维护适配器与私有资产。
+
 ### 6.4 Workspace / Docker 安全执行
 
 **禁止候选代码获得宿主自由执行能力。** 建议 Docker 无网络、非 root、受限 CPU/内存/PID、只挂载当前任务源码与必要公开资产；不要挂载整个宿主仓库、用户目录、密钥、Docker socket 或私测目录。不同 episode 独立目录/容器，完成后回收子进程与资源。对无 Docker 的 Mac 环境，必须先有 Docker daemon 并实测；仅安装 CLI 不算完成。
 
 安全测试至少覆盖：文件路径 `../../` 越界、符号链接逃逸、恶意导入、死循环、无限输出、额外写测试文件、企图联网、长时间子进程未回收、语法错误、测试自身异常。**“Docker 已启动”不是隔离通过的证据**；需要反例测试和实际拒绝记录。
+
+#### i、恢复仓库、应用补丁与提交
+
+1. **可信侧还原缺陷状态。** 固定数据 revision、上游 commit/实例分支和镜像 digest；按对应适配器复原，核对源码树 hash、依赖、架构与测试运行入口。已含缺陷的快照不得二次应用注错补丁。
+2. **候选侧从同一快照隔离运行。** 每局使用独立副本，不提供可揭示修复的 Git 历史、其他分支或参考文件。构建阶段锁定的依赖预装入镜像；运行时不允许模型联网安装或改测试、依赖配置及评分脚本，除非任务规范明确允许的源码范围。
+3. **校验后应用候选补丁。** 校验规范化路径、文件白名单和补丁所针对的快照；在隔离副本应用，失败不留下半份更改。提交冻结快照和相对初态的 diff/hash；独立评分从干净起点复核候选变更，不复用被候选进程污染的运行环境。
 
 ### 6.5 Public Test 与 Private Test 信息流
 
@@ -580,7 +609,7 @@ Qwen3.5-2B 的公开模型卡可能涉及混合架构与多模态模型用法；
 3. **训练奖励**由 Grader 向 Trainer 提供标量/状态，不将私测失败细节作为 Main 的当前轮观察。
 4. **开发集**允许调试奖励和测试逻辑；**正式保留集**一旦冻结，不得用于重新选超参或补 SFT 示例。
 
-对于 Python 函数题，初期可用 JSON 序列化的输入输出与独立进程调用。对复杂对象、临时文件和仓库任务，需明确输入契约/运行依赖，不得无限扩展执行表面。
+函数题优先用独立进程调用候选函数，由可信侧比较输出。仓库题用固定 runner 和预声明用例 ID 验证：原失败用例必须通过，原通过用例不得回归；缺失、跳过或收集失败不能按通过。测试选择、结果解析和评分在可信侧完成，不能相信候选输出的“通过”。公开套件与独立套件分离；若原仓库测试可见，不得把它改名成隐藏测试。正式仓库任务须审核基线反例、私有复核用例及不回流的评分边界。无法将私有用例或真值与候选进程隔离的任务，只能报告为上游测试复现或探索案例，不进入独立正式分母。
 
 ### 6.6 提交与不可逆操作
 
@@ -602,17 +631,32 @@ Qwen3.5-2B 的公开模型卡可能涉及混合架构与多模态模型用法；
 
 本项目需要**三种不同资产**：①可验证的 Coding 任务及测试；②经过真实运行的 Main 专家行为轨迹供 SFT；③从训练任务在线采样的多条完整 Rollout 供 GRPO。评测集独立冻结。**SFT 和 GRPO 可以使用同一训练任务池，但不能把保留集及其变体混进去。**
 
-### 7.2 建议的数据来源和严格拆分
+### 7.2 数据来源、规划规模和严格拆分
 
-| 集合 | 初始来源/方式 | 用途 | 注意事项 |
-|---|---|---|---|
-| Train | MBPP 原训练区间（原方案 ID 601–974，按源数据版本核对），加审核的自建题 | SFT 与 RL 更新 | 不是所有公开题天然适合工具委派；需再做转换与检查 |
-| Dev | MBPP 原验证区间（原方案 ID 511–600）和独立开发题 | 调试、选模型/超参、确定任务难度 | 可以反复看，但不得最后声称“从未见过” |
-| Held-out F | MBPP+ 与 MBPP 原测试区间（原方案 11–510）交集并按源题去重 | 单模块最终测试 | 数据集网页的 `test` 标记不代表源 MBPP 原测试集 |
-| Held-out M | 12 个独立小项目（数据/日志/配置各 4 题，原方案保留） | 工程迁移 | 作者/审查者分离；结果单独成表 |
-| Smoke | `count_positive` 等 4–8 个反复调试题 | 快速端到端验收 | 绝对不能作为最终泛化指标 |
+先把每个来源转成第 6 章的 TaskSpec，再根据来源语义准备快照和测试。**原始行提供的是题目和评分依据，不提供 Main 的标准行动，也不需要自带难度标签。**
 
-**原规划数量不是承诺：** 本地试点可用 32/8/40，云端目标可扩成 80/24/80，但新版动态 MAS 的采样成本更高。先审核有效题目、完成全链路测量，再冻结规模；不能在看见保留集成绩后筛选题目。
+| 来源与上游规模（已核实） | 字段与许可证 | 执行和测试协议 |
+|---|---|---|
+| [MBPP 官方说明](https://github.com/google-research/google-research/tree/master/mbpp) · [数据卡](https://huggingface.co/datasets/google-research-datasets/mbpp)：full 共 974 题，其中 Train 374 题 | `task_id, text, code, test_list, test_setup_code, challenge_test_list`；HF 数据卡为 CC BY 4.0 | 函数签名/stub + Python 断言；`code` 只用于可信侧核验。原始 ID 601–974 训练、511–600 验证、11–510 测试、1–10 提示；sanitized 子集继承原划分 |
+| [EvalPlus MBPP+ 数据卡](https://huggingface.co/datasets/evalplus/mbppplus) · [执行器](https://github.com/evalplus/evalplus)：378 题版本 | `task_id, prompt, code, test_imports, test_list, test` 等；HF 数据卡为 Apache-2.0 | 固定 EvalPlus 版本、依赖和增强测试；只选与 MBPP 原测试 ID 对应的去重子集，报告为 CoPatch-RL 保留子集，不冒充全量 MBPP+ 成绩 |
+| [SWE-smith Python 发布集](https://huggingface.co/datasets/SWE-bench/SWE-smith-py) · [论文](https://arxiv.org/abs/2504.21798)：Python 版约 5.1 万实例、131 个仓库；早期论文约 5 万实例、128 个仓库 | `instance_id, repo, image_name, problem_statement, patch, FAIL_TO_PASS, PASS_TO_PASS`；HF 数据卡为 MIT；描述可能为空，当前 Python 表无 `base_commit` 和 `test_patch` | Docker 仓库环境；从已验证的缺陷状态生成修复，按对应仓库测试与解析器验证 F2P/P2P；项目另设独立评分，详见下文 |
+| [SWE-Gym 数据卡](https://huggingface.co/datasets/SWE-Gym/SWE-Gym) · [官方工程](https://github.com/SWE-Gym/SWE-Gym)：2,438 个实例、11 个 Python 仓库（候选） | `instance_id, repo, base_commit, problem_statement, patch, test_patch, FAIL_TO_PASS, PASS_TO_PASS`，另有 `version, created_at, hints_text`；HF 数据为 MIT，项目代码为 Apache-2.0 | 从修复前 `base_commit` 启动其可执行环境；`patch` 是上游参考修复，`test_patch` 由评分侧应用；核对 F2P/P2P，不向 Main 传参考补丁或事后提示 |
+
+**SWE-smith 的补丁方向。** 原始 `patch` 是从正常状态 **注入缺陷** 的补丁，不能直接作为修复标签。旧论文中的 `base_commit` 指已注错的提交；当前数据表不应假设有该字段。[上游评分实现](https://github.com/SWE-bench/SWE-smith/blob/main/swesmith/harness/utils.py) 在参考评测时反向应用注错补丁；当前 runner 还假设实例分支顶端提交移除了 F2P 测试文件，评分时回到缺陷提交恢复测试。该约定不适用于所有旧版本。适配器须按所锁定版本核实分支和提交，分别登记干净态、缺陷态和测试恢复状态，实测“缺陷态失败 → 参考恢复后通过，原通过项无回归”才收录。逆补丁仅是可信侧验证材料。描述为空或包含补丁、参考实现、隐藏用例时，只保留审核后的公开症状和约束；无法核实则隔离实例。
+
+**评分口径。** F2P 是参考修复前失败、修复后通过的用例；P2P 是修复前后均应通过的回归用例。上游解析与通过规则按版本登记；例如当前 [SWE-smith](https://github.com/SWE-bench/SWE-smith/blob/main/swesmith/harness/grading.py) 与 [SWE-Gym](https://github.com/SWE-Gym/SWE-Bench-Fork/blob/main/swebench/harness/grading.py) 的对应评分代码把 `PASSED` 和 `XFAIL` 都纳入通过口径。CoPatch-RL 的正式分数要求指定用例实际通过及独立复核，标为项目自定义协议。SWE-smith 的 `f2p_only` 缩减了测试范围，不能用作完整回归验收。上游可见用例不自动成为项目私测。
+
+各规模是上游发布口径，**不等于 CoPatch-RL 的可用题量**。登记实际 pin 后的行数、仓库及许可证；数据集发布许可不代替上游仓库、测试文件和镜像再分发许可。
+
+| 集合 | V2.1 正式规划目标 | 样本口径 |
+|---|---:|---|
+| Train · SFT | 约 **1,000 道不同任务 / 2,000 条**真实协作轨迹 | 轨迹通过验收才计入；每条可能拆为多个 Main 决策样本，另报有效 token 数 |
+| Train · GRPO | 约 **800 道不同任务 × G=4 ≈ 3,200 条**完整在线 Rollout | 以主运行每题采样一组为估算；额外轮次、第二种子和重试另计，不增加独立任务数 |
+| Dev / Validation | **100–150 道**独立任务 | 函数与仓库两层合计，用于调试和配置选择 |
+| Test / Held-out | **200–300 道**独立任务 | 两层合计；函数层是 MBPP+ 与 MBPP 官方测试区间交集的子集；仓库层以仓库隔离的 SWE-smith 为主 |
+| 探索 / Smoke | 12 道独立小工程题；另有少量 Smoke fixture | 12 题单列（数据/日志/配置各 4 题），Smoke 只验收接口，均不计入正式 Test |
+
+Train 的建议起始配比是 **MBPP 20% / SWE-Gym 40% / SWE-smith 40%**，按各阶段独立任务数计算，待数据与成本审核。如果 SWE-Gym 的许可、环境、重叠或成本不适合，**MBPP 20% / SWE-smith 80%** 可作为两源备选，同样不锁死。选 MBPP 子版本时先核对可用独立题量，不能靠改写同一道题补配额。SFT 与 GRPO 可共享 Train 源题；GRPO 必须由当前策略重新交互采样，不复用 SFT 轨迹冒充 Rollout。上述数字是规划目标，试点后冻结实际规模。
 
 ### 7.3 为“统筹策略”专门设计任务
 
@@ -624,13 +668,17 @@ Qwen3.5-2B 的公开模型卡可能涉及混合架构与多模态模型用法；
 - **重试可能有效：** 公开失败给出可以修复的错误位置和原因。
 - **不应重试：** 当前代码正确、Reviewer 提供无关建议；正确终止是可学习行动。
 
-“可能有效”需**由开发集上的真实多策略试验验证**，而非按类别人工断言。不同任务类型至少记录一次直接/规划/审查路径是否能区分结果，避免 GRPO 全零/全一组。
+分层先用结构特征（相关文件数、依赖跨度、测试覆盖、接口与边界条件），再用 Dev 的工具合法率、首版通过率、修复轮数及耗时校准。固定分层规则后应用到 Test，不用 Test 结果重新分组。难度用于抽样和报告，不作为默认 Prompt，也不规定某一类题必须委派给谁。
 
 ### 7.4 数据结构与 Manifest
 
-推荐 `datasets/manifests/{train,dev,test}.jsonl`，每行至少：`task_id, family_id, origin, origin_revision, license, split, kind, difficulty, requirement_hash, snapshot_hash, public_suite_hash, private_suite_ref, reference_hash, allowed_files, review_status, author/reviewer`。私有资产单独路径存放；Git 仓库公开时不上传带密钥、个人隐私及不允许公开的测试资产。
+| 资产 | 最小可追踪信息 |
+|---|---|
+| 原始 Coding 任务与转换记录 | 来源、revision、源题/仓库族/问题族、划分、许可、TaskSpec 与快照/镜像/用例 hash；可公开 Manifest 与评分私有索引分开 |
+| SFT 监督轨迹 | Teacher 及版本、完整事件引用、接受/拒绝原因、每轮实际可见输入与 Main 标签、有效 token 数 |
+| GRPO Rollout | 旧策略、任务和初始状态、组与独立 episode、Main 实采 token/旧 logprob/mask、提交 hash、奖励、终止原因与成本 |
 
-**同源去重：** 不仅按完整字符串，还按函数签名、AST/模板结构、问题语义与源题 ID；同题改变量名、缩进、常数不应跨 Train/Dev/Test。同一个开源 benchmark 的公开参考和底座预训练污染风险需要在报告中披露。
+**拆分先于采样。** MBPP 及 MBPP+ 按原始源 ID 关联，并按签名、AST、语义和近重复题族审查。SWE-smith 和 SWE-Gym 先按统一仓库身份归并上游仓库、镜像、重命名与 fork，再以缺陷、补丁、测试或生成模板形成的问题族阻止跨集合；仓库族不跨 Train/Dev/Test，即使来自不同数据源。公开集的代码、题解或测试可能已进入底座/Teacher 预训练。冻结来源和去重清单只能防止项目自身泄漏，不能证明预训练未见；报告来源分层结果和这一限制。
 
 ### 7.5 AI 辅助造数据的正确流程
 
@@ -662,19 +710,33 @@ Qwen3.5-2B 的公开模型卡可能涉及混合架构与多模态模型用法；
 
 ### 8.2 一条 SFT 样本应该长什么样？
 
-```text
-[公开上下文]
-系统身份：Main coding orchestrator
-任务：修复 CSV 金额解析，支持小数与非法输入
-当前状态：Coder 已提交候选版本 hash=abcd；公开测试失败1/5
-工具观察：ValueError ... 发生在第17行
-剩余预算：2次委派，1次公开测试
+下面把一局拆成四个训练样本。为便于阅读，动作使用“工具名 + 参数”的表示；正式训练必须用记录的实际序列化输入与输出。**Teacher/Coder 对话是教学构造，测试结果由独立标准库样例实际执行得到。** 这不是模型运行日志、正式轨迹或 Docker 验收。
 
-[监督目标：只训练 Main 这一段]
-call_reviewer({"code_hash":"abcd","focus":"定位第17行金额解析失败"})
+| 输入段 | 第一步实际可见信息的示意 | Loss mask |
+|---|---|---:|
+| System 与工具说明 | 你是 Main；只选择已注册的动作，不能直接修改文件；本局工具为委派、应用补丁、公开测试、提交 | 0 |
+| Task 与可见源码 | `toy_count_positive`：统计有限实数列表中严格大于 0 的元素；空列表返回 0。可写文件 `solution.py`；入口 `count_positive(values)`；初态是函数 stub | 0 |
+| Session、公开套件和预算 | 根 Session `toy-main`，初态 `s0`（教学快照代号），无历史；套件 `toy-public`；4 步、1 次委派、1 次修改、1 次公开测试、2,048 生成 token、60 秒为上限 | 0 |
+| Main 标签 | `call_coder({"instruction":"实现 count_positive；严格大于零，保留小数语义，空列表返回0","files":["solution.py"],"feedback":""})` | 1 |
+
+Coder 的教学响应给出下列候选补丁。第二步的 `patch` 参数就是这段完整 diff：
+
+```diff
+--- a/solution.py
++++ b/solution.py
+@@ -1,2 +1,2 @@
+ def count_positive(values):
+-    raise NotImplementedError
++    return sum(x > 0 for x in values)
 ```
 
-下一轮 Supervisor 输入应包含**Reviewer 真正运行产生的回答**，再监督 Main 如何调用 Coder 修复。**不能把多个真实时刻随意拼成一个不存在的上下文。**
+| 后续决策 | 在同一根 Session 新增的可见历史和剩余次数 | Main 标签（mask=1） | 本步结果进入后续上下文（mask=0） |
+|---|---|---|---|
+| 2 | Coder 返回实际候选内容；仍在 `s0`；3 步、0 委派、1 修改、1 测试 | `apply_patch`，参数 `path="solution.py"`，`patch` 为上面候选与 stub 的完整 diff | 补丁应用结果与新快照 `s1`（示意） |
+| 3 | 已写入 `s1`；2 步、0 委派、0 修改、1 测试 | `run_public_tests({"test_suite_id":"toy-public"})` | 实测：`[-2, 0, 2] → 1`、`[] → 0`；`unittest` 2/2 通过，退出码 0 |
+| 4 | `s1` 的公开测试通过；1 步、0 委派、0 修改、0 测试 | `submit({"reason":"当前快照通过公开用例，提交验收"})` | 提交冻结；独立执行 `[-0.25, 0, 0.25] → 1`，1/1 通过，退出码 0；仅训练侧记录，Main 看不到 |
+
+每步仍包含 System、Task、已有 Session 历史和当时实测的 token/时间余额；表内仅列变化部分，教学例不虚构 token 数。把该步真实 Main 标签接到输入前缀后，形如 `[0 × 前缀长度, 1 × 有效目标长度, 0 × padding长度]`；上一步 Main 动作在下一步作为历史时也是 0。工具结果只能进入后续决策输入，不能提前出现在产生该动作的输入中。
 
 ### 8.3 四类核心示范
 
@@ -689,12 +751,12 @@ call_reviewer({"code_hash":"abcd","focus":"定位第17行金额解析失败"})
 
 ### 8.4 数据生产：Teacher + 真实 Frozen Sub-Agent
 
-1. 由强 Teacher Main 或人工编排生成行动（可使用在线 API 额度）；
-2. **由目标训练/评测条件中的真实 Sub-Agent 和真实工具执行动作**，生成 Observation；
-3. 存下每轮的 Main 输入、Teacher 动作、子调用返回、代码 hash、公开测试与终局分数；
-4. 通过完整性、正确性与成本审查，挑选可学习的优质轨迹；
-5. 将成功轨迹中的 Main 行动抽成监督样本，同时保留真实上下文与可选失败分析；
-6. 固定训练数据版本和 Teacher 模型版本；同一来源任务不跨 split。
+`Coding Task → Teacher Main → 真实 Frozen Sub-Agent / 工具交互 → 真实执行验证 → 轨迹筛选 → Main 决策监督样本 → SFT`
+
+1. Teacher Main 按实际公开上下文生成下一动作；可用独立在线 Teacher，但不接触原始参考解、私测或未发生的反馈。
+2. 真实 Frozen Sub 与宿主工具执行动作；保存 Session、Main 实际输入、原始行动、返回、快照 hash、剩余预算和公开测试结果。真实候选提交后由独立 Grader 验收。
+3. 按任务来源审核合法动作、交互完整性、执行结果、成本和重复轨迹；记录候选数、接收率及拒绝原因。优先采用成功且行为多样的轨迹；失败轨迹默认留作诊断，止损示范只有在规则预先定义并核验后才纳入。
+4. 逐轮抽取 Main 的工具名、调用参数、委派指令和停止动作作为监督标签。保存当时的公开任务/仓库、历史反馈、Session 与预算；拒绝事后补写的行动或观察。分别统计任务、完整轨迹、决策样本和有效标签 token，锁定 Teacher 与数据版本。
 
 注意：**用 Hybrid Teacher + 在线 Sub 生成的协作轨迹，直接用于 Local Frozen Sub 的 SFT 可能造成“观察分布不匹配”**。最佳做法是优先在对应 Local 环境采集示范；若混用，明确记录来源并验证目标 Local Main 能用得起来，禁止伪装成同分布。
 
@@ -709,12 +771,12 @@ SFT 以 Main 的生成 token 为标签，其余全部 `labels=-100`（或框架�
 | 参数 | 起步建议 | 启用前核验 |
 |---|---|---|
 | `r / alpha` | 8 / 16 | 参数注入位置实际存在、trainable 参数数目正确 |
-| `target_modules` | Qwen3 文本模块可试 `q_proj,k_proj,v_proj,o_proj` | Qwen3.5 需按模型架构查证，不能盲抄 |
+| `target_modules` | 待正式 Qwen 4B 变体确定后选择；仅当实际层存在时试 attention 投影 | 列出命中层、形状、参数量及冻结范围；保存重载验证 |
 | 学习率 | `1e-4` 起步 | 观察 loss/梯度、验证集是否退化 |
 | epoch | 1–2 起步 | 数据规模与过拟合诊断 |
 | 最大上下文 | 例如 2048–4096 token | 预算/记忆占用、长工具反馈截断行为 |
 | batch | microbatch 1 + gradient accumulation | 实际显存与吞吐 |
-| 模型底座 | 冻结 | checksum 或逐参数一致性验证 |
+| 模型底座 | 固定 Qwen 4B 仓库与 revision，冻结 | 固定 dtype、模板、注意力后端；核验底座与 Sub 权重不变 |
 
 先在 4–8 条样本上尝试**可控过拟合测试**：loss 有限、有效标签 token 数 >0、LoRA 权重前后不同、Base/三 Sub 不变、重启进程后可加载并输出合法工具动作。完成后再扩大 SFT；超参是可调整建议，不是已验证“最佳配置”。
 
@@ -735,7 +797,7 @@ SFT 以 Main 的生成 token 为标签，其余全部 `labels=-100`（或框架�
 - **动作 `a_t`：** Main 生成的一段可解析的委派/工具请求及参数，或提交/停止。
 - **转移：** Harness 执行动作、更新代码与预算，冻结 Sub 产生有条件返回，公开测试产生观测。
 - **奖励 `R(τ)`：** 独立 Grader 对最终代码的测试与约束得出的标量，可加成本项。
-- **策略 `π_θ(a_t|h_t)`：** `Qwen_base + Main_LoRA_θ`，输入为当时的实际可见历史 `h_t`。
+- **策略** $\pi_\theta(a_t\vert h_t)$：由冻结 Qwen 4B 与 Main LoRA 组成，输入为当时的实际可见历史 $h_t$。
 - **Episode：** 从任务/快照 reset 到提交、预算耗尽或终止的一次完整决策轨迹。
 
 由于隐藏测试和其他未观测因素存在，更严谨地可以称**部分可观测、多步交互决策过程**。本期只优化 Main 的一套策略参数，**不属于多个可训练 Agent 同时做 MARL**。
@@ -759,7 +821,7 @@ for each selected train task x:
   optimizer.step() on Main LoRA; save checkpoint and diagnostics
 ```
 
-`G` 是**同一道题从同一初态出发的独立轨迹数**，而不是不同题的混合。每条轨迹独立工作区；环境随机性应可控并记录；生成不必相同。组采样期间旧策略参数不应在中间改变。
+`G=4` 是正式规划的**同题独立轨迹数**。四条轨迹固定同一个任务、初始快照、镜像、公开套件、预算、Frozen Sub 配置和旧策略；每条使用独立工作区、Session、缓存与可记录的采样随机流，不读取同组其他候选或历史。四条完整采样结束后才能计算组优势；可串行采样以控制显存。额外重复某题或运行第二训练种子只增加组和轨迹数，不增加独立题数。
 
 ### 9.4 奖励与组相对优势
 
@@ -771,11 +833,11 @@ $$R_{\mathrm{pass}}(\tau)=\mathbf 1[\text{提交合法，最终快照通过全�
 
 $$\bar R=\frac1G\sum_{i=1}^{G}R_i, \qquad A_i=\frac{R_i-\bar R}{\mathrm{std}(R_1,\ldots,R_G)+\delta}.$$
 
-例如 `[1,0,1,0]` 会产生正负学习信号；`[0,0,0,0]`、`[1,1,1,1]` 几乎没有组内任务区分信号。若所有组全零，**先排查工具合法率、子 Agent 能力、题目难度、奖励器和 SFT，而非盲目加大梯度或篡改评分**。
+例如 `[1,0,1,0]` 会产生正负学习信号；`[0,0,0,0]` 与 `[1,1,1,1]` 的任务优势均为零。保留这些组的奖励、轨迹、耗时与比例，不只删除失败组；零优势组不贡献任务策略项，若启用 KL，正则项是否仍更新由锁定配置决定。无效提交、模型耗尽预算或候选失败按预定规则给 0。基础设施故障单列，按预先固定的重试上限在同一旧策略下补采；无法组成完整有效组时记录整组未用于更新，不把故障当 0 奖励。若全零比例高，先查工具合法率、子 Agent 能力、题目难度、评分器和 SFT。
 
 ### 9.5 策略损失与重要性比率（示意）
 
-每个 Main 生成 token 的新旧策略概率比 `r_t(θ)=π_θ(y_t|h_t)/π_old(y_t|h_t)`。典型 clipped policy objective：
+每个 Main 生成 token 的新旧策略概率比为 $r_t(\theta)=\pi_\theta(y_t\vert h_t)/\pi_{\mathrm{old}}(y_t\vert h_t)$。典型 clipped policy objective：
 
 $$\mathcal L(\theta)=-\frac1{GC}\sum_{i=1}^G\sum_{t\in\mathrm{MainTokens}(\tau_i)}\min\left[r_{it}(\theta)A_i,\;\operatorname{clip}(r_{it}(\theta),1-\epsilon,1+\epsilon)A_i\right].$$
 
@@ -798,7 +860,7 @@ Main token: submit()                               ← 训练
 
 **绝不能对整条字符串直接求语言模型交叉熵。** 每段 Main 输出必须保存角色、生成时的完整上下文、原始 token IDs、旧 logprob、策略版本和有效 mask。工具观察与 Sub 生成文本是下次行动的上下文，但对当前 Main policy loss 的 mask 为 0。
 
-重要细节：一次 Agent Episode 内多个 Main 调用往往对应**多个独立模型生成前缀**。不能假设它们可以无损拼成一个连续的自回归 token 序列。应逐生成段计算 `π_θ(y_t|h_t)`，再按完整 trajectory 的共同优势聚合损失；旧概率必须与采样时的**相同 token、相同前缀**对应。
+重要细节：一次 Agent Episode 内多个 Main 调用往往对应 **多个独立模型生成前缀**。不能假设它们可以无损拼成一个连续的自回归 token 序列。应逐生成段计算 $\pi_\theta(y_t\vert h_t)$，再按完整轨迹的共同优势聚合损失；旧概率必须与采样时的 **相同 token、相同前缀** 对应。预检还要核对采样变换（如 temperature、top-p）与新旧概率口径，确认锁定的训练适配器如何处理差异。
 
 ### 9.7 训练器与 Harness 的边界
 
@@ -810,14 +872,14 @@ Main token: submit()                               ← 训练
 
 | 条目 | Smoke / Local 起点 | Cloud 试点起点 | 注意 |
 |---|---|---|---|
-| 底座 | Qwen3-0.6B → 1.7B | 1.7B 或 3.5-2B | 每次只改变一个主要因素 |
-| Group size | 2 | 4（显存允许时） | 组内应有不同 reward 才有比较信号 |
-| 训练步数 | 先 1 步真实梯度 → 20 步 | 试点后再确定，如 50–100 步 | 不保证在预算内完成所有组合 |
+| 底座 | FakeClient / 小模型只做链路试点 | 正式为 Qwen 4B（仓库/revision 待选） | 正式结论需 4B 全链路验收 |
+| Group size | 可用 2 验证接口与梯度 | 4；可串行收集 | G=2 只作试点，不混报正式结果 |
+| 任务 / 优化步数 | 先用少量函数及仓库任务做真实试点 | 约 800 题、3,200 条完整轨迹为主运行目标 | optimizer steps 随分组批量、累积和重复训练变化，独立记录 |
 | RL 学习率 | `5e-6` 起步 | 试点扫描 | 比较梯度与 reward，不盲追训练曲线 |
 | LoRA | `r=8, alpha=16` | 同架构复制起点 | 保留 SFT checkpoint 作共同初始化 |
 | Clip / KL | `ε=0.2`；是否 `beta=0` 需对齐代码 | 先低成本、再调稳定性 | 关闭 KL 不等于没有旧策略比率 |
 | 采样 | 合理温度、原始 token 保真 | 与硬件实现一致 | 训练采样与评测解码分开 |
-| 种子 | 42、43（计划） | 两个独立种子 | 指标分别列出，不抹平差异 |
+| 种子 | 固定并记录 | 主种子与预算允许时的独立复核种子（例如 42 / 43） | 第二种子额外计费和统计；只完成一个则明确说明 |
 
 ### 9.9 真实参数更新的五条证据
 
@@ -878,54 +940,54 @@ Main token: submit()                               ← 训练
 
 $$\theta_{\mathrm{base}}=\mathrm{frozen}, \quad \theta_{\mathrm{Main-LoRA}}^{\mathrm{init}} \xrightarrow{\mathrm{SFT}} \theta_{\mathrm{SFT}} \xrightarrow{\mathrm{GRPO}} \theta_{\mathrm{RL}}.$$
 
-最终部署：`Main = 固定 Qwen 底座 + 训练后的 Main LoRA`，再加**固定 Harness 与 Frozen Sub-Agent**。Qwen 不会因为 LoRA 获得无限的专业代码知识，项目主要研究的是模型**怎样调用已有能力**。
+最终部署：`Main = 固定 Qwen 4B 底座 + 训练后的 Main LoRA`，再加**固定 Harness 与 Frozen Sub-Agent**。Qwen 不会因为 LoRA 获得无限的专业代码知识，项目主要研究的是模型**怎样调用已有能力**。
 
-建议保存三份明确版本：原始 Base（不纳入大权重仓库）、SFT Adapter（比较基线）、GRPO Adapter（研究结果）；另保存 optimizer 与 progress 用于继续训练。训练与推理启动时验证 Base revision、Tokenizer/chat template 与 Adapter config 配套。
+原始 Base 仅登记仓库、revision 和权重哈希；SFT Adapter 作为 C 与 D 的共同起点，GRPO Adapter 按种子分别存。推理检查点保存 adapter 权重和 PEFT 配置、Base/Tokenizer/template 指纹、数据/提示/训练配置 hash 与步数。可续训检查点另存 optimizer、scheduler、采样器位置、RNG 状态及计数，在完整更新边界保存；中途丢失的组按协议记账、重采，不拼成完整轨迹。重启后核验 Base 与三个 Sub 不变、adapter 与权重指纹匹配、工具格式和固定输入推理可复现。
 
-### 11.2 Mac 与云端角色分工
+### 11.2 本地开发与 CUDA 训练
 
-| 环境 | 推荐承担 | 风险 |
+| 环境或资源 | 起步方案 | 必须实测 |
 |---|---|---|
-| Apple Silicon（可选本地开发设备） | 开发、API/本地推理、最小 LoRA/SFT 测试、轨迹检查 | MPS + TRL 具体算子兼容性未知；全套多轮 GRPO 可能很慢 |
-| RTX 4090 / CUDA | 正式 1.7B–2B LoRA、RL 小规模训练 | 24GB 显存受上下文、多条 rollout、并行子模型影响 |
-| 32GB 或 80GB GPU（可选） | 4B 或长序列/复杂采样试点 | 超预算风险明显增加 |
-| 在线 API | 真实在线 Sub-Agent 和迁移评测 | API 花费与 rate limit；不能直接训练供应商权重 |
+| 本地 CPU / MPS | 开发、隔离执行、本地推理与最小链路；已拥有设备可零新增现金试点 | 4B 加载和推理内存、实际算子；本地全规模训练可行性未确认 |
+| 单张 CUDA 卡 | 24 GB 级设备仅为候选试点；优先 microbatch=1、累积、必要时分时部署 Sub；保留正式 G=4，串行采样 | 锁定驱动与 PyTorch/CUDA、Transformers、PEFT、TRL 版本；测 SFT 反传、GRPO 采样和更新峰值、吞吐、保存重载 |
+| 更大显存卡 / 可选量化 | 仅在未超现金上限且确有收益时选择 | 量化、重计算、显存节约与性能均需复测；C/D 必须使用相同已冻结推理条件 |
+| 三个 Frozen Sub | 优先共用一套冻结权重；CPU、分时 GPU 或独立进程按实测选 | KV 缓存分离；全部生成耗时与费用入账，不能把冻结当成免费 |
 
-**在线 Sub 的费用不能按 0 估算**；若本地 Sub 推理慢，也必须将 Sub 推理总耗时纳入 Rollout 成本。单卡 4090 训练 Main 与多个本地 Sub 可能争抢 GPU，必要时冻结 Sub 使用 CPU/异步服务或分时调用，并实测吞吐。别因为 LoRA 只训练 1–2B 就认为整个流程一定便宜。
+**显存量级估算：** 约 40 亿参数 × 每参数 2 字节 ≈ 8 GB（十进制），仅是 Main 底座权重的理论量级。峰值还包括活化、LoRA 梯度/优化器、生成 KV cache、旧 logprob 缓存、运行时开销，以及本地 Sub 同驻权重。参考策略仅在启用且实现确需独立副本时额外估算；旧策略采样与固定参考策略是两个概念。分别记录生成、SFT 反传、GRPO 更新和评分时的设备/宿主内存峰值。仓库容器主要消耗 CPU、内存、磁盘和等待时间，但等待期间已启动的 GPU 也可能计费。
 
 ### 11.3 先用“小实验”测真实耗时，再决定训练规模
 
-从 8 道 Train + 4 道 Dev 开始：
+先用少量函数和仓库 Train/Dev 任务，分别测冷启动、热缓存和慢任务；验证 Qwen 4B 的 **真实采样 → 独立奖励 → 有限梯度 → optimizer step → 保存/重载**。记录每局角色/工具调用次数、总 token、候选失败、环境故障、排队与结算时长。按来源和任务层估成本，留出慢任务和重试余量。
 
-- 记录每条轨迹 Main 生成 token、每个 Sub 的输出、公开测试次数与耗时；
-- 对比 0.6B / 1.7B / 2B 的合法工具调用率和具体训练兼容性；
-- 完成 1 次**真实完整 rollout → reward → 有限梯度 → optimizer step → LoRA 保存/重载**；
-- 记录 `cost_per_episode`、`seconds_per_optimization_step`、峰值设备内存/显存、每个失败类型；
-- 按真实时间 × 任务 × 组大小 × 超参/种子次数估算总费用，**额外预留等待、评测和失败重试**。
-
-把“一个 GRPO step 是几条轨迹、几个模型请求和几次工具执行”写清楚；不能只估每个 `optimizer.step()` 的 GPU 时间。
+| 成本项 | 目标规模与估算口径 |
+|---|---|
+| Teacher 采样 | 接收目标约 2,000 条；候选尝试量约为目标除以实测接收率。每局累加 Teacher API 输入/输出、Frozen Sub 推理、公开及独立测试；失败候选也计费 |
+| SFT / GRPO | SFT 按实际有效 token、epoch 和反传吞吐估算；主 GRPO 约 3,200 条完整轨迹，另计采样失败、重试、第二种子及优化耗时 |
+| Dev / Test | Dev 四组每轮约 400–600 局；Test 四组约 800–1,200 局，另计 D 的额外种子、复核、Hybrid 与消融；按各层实测估算 |
+| 仓库环境与存储 | 盘点模型及适配器、去重后的镜像层、依赖/仓库缓存、并发临时工作区、轨迹 token/logprob 和 checkpoint 保留数；量测构建、拉取、CPU 测试和传输 |
+| 账单 | GPU 以实际启动至停止的计费时长乘确认单价；API 按计费 token 档、缓存和已有额度分列，存储/流量单列；预测余量与真实账单分别登记 |
 
 ### 11.4 新增支出预算上限（原方案保留、内部可重分配）
 
 | 用途 | 上限（元） | 实施策略 |
 |---|---:|---|
-| GPU 兼容试点 | 20 | 非量化、短序列优先 |
-| SFT / 继续 SFT | 30 | 先完成共同 SFT 基线 |
-| GRPO 正式训练 | 120 | 两种子优先，小规模并验证轨迹 |
-| 评测与复核 | 40 | 正式集与可重复运行 |
-| 存储/传输 | 20 | 大权重不入 Git，实验资产归档 |
-| API 补充额度 | 20 | 优先用已有额度，真实付费照实记 |
-| 机动 | 50 | 升级模型/排错/重跑应急 |
+| GPU 兼容试点 | 20 | 4B 峰值显存、反传与重载 |
+| SFT / 继续 SFT | 30 | 主 SFT 优先，继续 SFT 可裁剪 |
+| GRPO 正式训练 | 120 | 主运行优先，额外种子另计 |
+| 评测与复核 | 40 | 两层四组及复现 |
+| 存储/传输 | 20 | 仓库镜像、缓存和产物 |
+| API 补充额度 | 20 | Teacher 与 Hybrid 分开记账 |
+| 机动 | 50 | 重试与环境问题 |
 | **合计** | **300** | **现金新增支出，不含已拥有额度的折算使用价值** |
 
-单价随平台和时间变化，不能将之前讨论的“4090 约每小时若干元”写成合同价。租用前登记：平台、实例型号、显存、区域、价格/计费粒度、实际启动至停止时间、失败重试；**预算固定，训练规模不固定**。
+以上是可重分配的规划额度，不是报价，也未证明覆盖全规模。预检完成后用实测吞吐和待租实例的计费口径重算；若预测含预留超过 **¥300** 或剩余期限，先冻结可承担的范围再运行，新增支出不得超过上限。
 
 ### 11.5 风险回退顺序
 
-1. **模型/框架问题：** 先在 0.6B 或 1.7B 复现可训练路径；再尝试 2B；Qwen3.5 架构不兼容时不用硬上。
-2. **资源不足：** 先减上下文长度、组大小、可训练并行数，再减少非必要实验；不牺牲评分隔离。
+1. **模型/框架问题：** 小模型只能排查连通性；优先验证另一个符合条件的 Qwen 4B 候选。仍未通过则标记 4B 正式训练阻塞，不自动换小模型得出正式结论。
+2. **资源不足：** 先串行采样、降低并行与试点上下文长度；再裁掉额外消融、继续 SFT、第二种子和不必要的 Hybrid 扩量，保留真实在线应用。仍超限时在看 Test 前按来源和仓库族冻结更小的双层数据规模，保留 G=4、真实 SFT/GRPO、独立评分及 A/B/C/D 公平对照。若连这套都不能完成，交已验证证据，明确标注缺失层/组和未达规模。
 3. **奖励没有差异：** 调试任务与可用能力、诊断格式错误；不要挑选最终测试题人为制造显著提升。
-4. **时间不足：** Python 在线应用与真实单次训练证据必须保留；减少 UI 花哨效果、模型规模与超参网格。
+4. **时间不足：** 先裁可选交互、界面装饰与超参网格，再按上述流程冻结规模；单次真实更新只能作为算法证据，不能宣称完成正式训练。
 5. **所有 GRPO 组都失败：** 如实报告训练无稳定提升，保留完整结果；不能把已完成 SFT 展示为 GRPO 效果。
 
 
@@ -971,7 +1033,7 @@ $$\theta_{\mathrm{base}}=\mathrm{frozen}, \quad \theta_{\mathrm{Main-LoRA}}^{\ma
 
 ### 12.5 正式冻结实验协议
 
-在看最终 Test 之前固化 `eval_protocol.json`：模型/checkpoint 哈希、四组定义、split/ID、预算、评测解码、随机种子、指标分母、失败处理、统计方法。修改协议必须提升版本号并保留旧版本结果；**不能在最后 12 题中找到几个难题后临时移出**。
+在看最终 Test 之前固化 `eval_protocol.json`：模型/checkpoint 哈希、四组定义、分层任务 ID 和仓库族、快照/镜像/测试版本、预算、评测解码、种子、指标分母、基础设施重试规则与统计方法。函数级（MBPP+ 保留子集）和仓库级（仓库隔离的 SWE-smith 为主）各自运行配对对照，D vs C 为主比较。12 个自建小工程单列探索结果。协议若因工程勘误必须修订，提升版本、保留旧结果并对所有相关组重评，不能根据最终得分筛题。
 
 ### 12.6 Local 与 Hybrid 不是第五和第六个“可直接混比”的组
 
@@ -979,7 +1041,7 @@ Local 模式内运行 A–D 是主要研究。Hybrid 模式另做至少 C/D 的�
 
 ### 12.7 两种子与统计功效
 
-若预算允许，D 至少两次独立 RL 训练种子（例如 42/43）；每条任务保留配对结果，报告逐种子均值与范围。任务级配对 bootstrap 可估计成功率差区间；**12 道小工程题只能做探索性展示，不能用极小差异支持很强的显著性宣称**。如果两种子方向相反，应如实说明不稳定。
+若预算允许，D 另跑一个独立 RL 训练种子（例如 42/43）；每条任务保留配对结果，报告逐种子成绩。函数层按题族、仓库层按仓库族做配对 bootstrap，避免把同仓库多题或重复种子当作独立任务；仓库数过少时以描述性结果为主。**12 道小工程题只作探索展示。** 只有一个种子或两种子方向相反时如实说明稳定性限制。
 
 ---
 
@@ -996,7 +1058,7 @@ Local 模式内运行 A–D 是主要研究。Hybrid 模式另做至少 C/D 的�
 | 指标 | 定义 | 分母/注意事项 |
 |---|---|---|
 | **Final All-pass Rate** | 最终提交通过完整可信测试的源题数 / 总题数 | **主要成功指标**，不能按测试断言数凑分 |
-| Initial Pass Rate | 首次生成候选是否正确 | 需要明确首次候选与最终代码 hash |
+| Initial Pass Rate | 首个实际写入的候选是否通过同一独立评分 | 首次候选和最终代码各自保存 hash；无首版单列，不用初始缺陷仓库代替首版 |
 | Fix Rate | 首版错误且最终修复成功 / 所有首版错误的任务数 | 分母为 0 记 NA |
 | Regression Rate | 首版正确但最终改坏 / 所有首版正确任务数 | 分母为 0 记 NA |
 | Public/Private Gap | 公开与私测通过差异 | 检查边界盲区及公开测试过拟合 |
@@ -1032,7 +1094,7 @@ Local 模式内运行 A–D 是主要研究。Hybrid 模式另做至少 C/D 的�
 
 ### 13.6 报告格式
 
-建议生成：`eval/per_task.jsonl`（每题每组）、`eval/summary.json`（总指标）、`eval/splits.csv`（分层）、`eval/cost.csv`、`eval/failures.md`（失败类型与案例）、`eval/plots/*.png`（独立图）、`eval/protocol.json`（冻结配置）。展示每个比较的样本数、成功数、失败数、两个种子、区间；**不只显示挑出来的最佳 case**。
+建议生成：`eval/per_task.jsonl`（每题每组）、`eval/summary.json`（总指标）、`eval/splits.csv`（分层）、`eval/cost.csv`、`eval/failures.md`（失败类型与案例）、`eval/plots/*.png`（独立图）、`eval/protocol.json`（冻结配置）。按函数/仓库、Local/Hybrid 分开，列各组题数、仓库数、成功数、失败数、实际种子和区间；**不只显示挑出来的最佳 case**。
 
 ---
 
@@ -1115,7 +1177,7 @@ GRPO 可能提高分数，但原因可能是模型调用更少、模型变得更
 | D: Dynamic GRPO (seed 43) | TBD | TBD | TBD | TBD | TBD | RL |
 ```
 
-所有指标必须来自同一正式 `eval_protocol.json` 对应的真实输出。成绩提高多少、平均调用降低多少等在获得独立保留集数据前**一律不预填**。
+按函数级和仓库级、Local 与 Hybrid 分别填表；Hybrid 单列同条件 C/D，第二种子只在实际完成时填。12 个自建工程案例另列。所有指标必须来自冻结 `eval_protocol.json` 对应的真实输出，获得独立保留集结果前 **一律不预填**。
 
 
 ---
@@ -1215,7 +1277,7 @@ CoPatch-RL/
 ```python
 # 伪接口说明：正式实现时以Pydantic模型/Protocol和测试为准
 run_episode(task: TaskSpec, config: RunConfig) -> EpisodeRecord
-ModelClient.generate(role, messages, tools, config) -> ModelResponse
+ModelClient.generate(role, messages, tools, config, trace_ctx) -> ModelResponse
 SessionManager.start_child(parent_id, role, args) -> SessionId
 ContextManager.build_view(session_id, role, token_budget) -> list[Message]
 ToolRegistry.execute(action: Action, scope: ToolScope) -> Observation
@@ -1227,7 +1289,7 @@ EvaluationRunner.run(condition_id, task_manifest) -> EvaluationReport
 
 **必不可少的类型字段：**
 
-- `TaskSpec`：任务 ID、family/split、可见需求、快照、可写文件、测试索引、预算、源版本；
+- `TaskSpec`：任务 ID、family/split、可见需求、快照、可写文件、测试索引、预算、源版本；仓库任务扩展由 A 审核，可用关联 Manifest 保存恢复和私测元数据，不打破现有公开视图；
 - `Action`：`tool_name`、经过校验的参数、目标角色/路径、Main step；
 - `Observation`：成功/失败、允许暴露的内容、时间、当前代码 hash、剩余预算；
 - `EpisodeRecord`：任务 ID、run/episode/group/session ID、模型/策略版本、事件序列、最终快照、奖励、费用、错误类型；
@@ -1394,11 +1456,11 @@ Stage / Owner / Branch / Base commit / Final commit
 
 **负责范围：** `training/`、训练配置模板、`scripts/assets/`、Contracts 维护；公共包/lock 由 A 管理。
 
-**完成清单：** Main Qwen/LoRA 初始化和冻结断言、SFT 样本与 Label Mask、真实 Rollout 接口、同任务组采样、GRPO 适配（按锁定的 TRL 版本）、Reward 接口、Checkpoint/恢复、本地/云端训练入口、训练数值和异常测试；构建模型及数据下载/校验脚本和资产清单模板，**不实际下载**。
+**完成清单：** 配置驱动的 Qwen 4B 加载、LoRA 注入与冻结断言；SFT 决策样本和 Label Mask；G=4 同任务隔离采样、GRPO 适配、独立 Reward、Checkpoint/恢复与数值测试；更新资产模板并审核 repo TaskSpec 兼容扩展，**不实际下载**。
 
 **Stage 1-A Prompt：**
 
-> 以 `stage1-base` 和 `AGENTS.md` 为准，仅实现 `training/`、训练相关配置及 `scripts/assets/`，禁止改 B/C 模块。完成 Main-only SFT/GRPO、Rollout/Reward/Checkpoint 与冻结和 token-mask 数值单测；用 Mock 事件、Tiny Model 或合成张量验收全部接口，保留对真实模型的加载路径，不下载任何权重/完整数据。交独立 PR、测试日志、未验证项；不得把 Mock 训练称为真实结果。
+> 以 `stage1-base` 和 `AGENTS.md` 为准，仅实现 `training/`、训练配置和 `scripts/assets/`；有公共契约改动先审查再由 A 更新。实现可配置的 Qwen 4B 加载与 LoRA 冻结、Main 决策 mask、G=4 分组、零优势与故障分账、保存/恢复。用 Mock 事件、小型随机初始化模型或合成张量验收；正式仓库和 revision 留待选择，不下载权重或正式数据。交独立 PR、测试日志和未验证项；不得将 Mock 称为真实训练。
 
 #### B：Main/Sub Harness、模型适配与在线应用（Stage 1）
 
@@ -1408,17 +1470,17 @@ Stage / Owner / Branch / Base commit / Final commit
 
 **Stage 1-B Prompt：**
 
-> 以冻结 Contracts 和 `AGENTS.md` 为准，只修改 `core/harness/agents/models/app` 与对应测试。完成 Main+3Sub 动态调度、固定基线、Session/Context、SQLite 索引+JSONL 事件、Local/Hybrid ModelClient、CLI/Web 的**全部代码**；Mock/FakeClient 跑多轮成功与失败，验证角色隔离、恢复、超预算、模型接口错误。不要下载权重/数据，禁止修改训练、评测、Contracts 或根依赖文件；提交 PR 与验收输出。
+> 以冻结 Contracts 和 `AGENTS.md` 为准，只改 `core/harness/agents/models/app` 与对应测试。保留动态调度、固定基线、Session/Context、SQLite/JSONL、Local/Hybrid 和 CLI/Web。用 FakeClient 跑函数与仓库任务的公开视图、补丁反馈和恢复；验证共享 Frozen Sub 权重时角色状态仍隔离，Main 输出保留原始生成边界。`ask_user` 仅为可选应用扩展，离线入口不注册。不要下载资产或越权修改；交 PR 和验收证据。
 
 #### C：执行、安全、数据管线与评测（Stage 1）
 
 **负责范围：** `execution/`、`data/`、`evaluation/`、`examples/dev/`。
 
-**完成清单：** 隔离 Workspace、Docker 沙箱、公开/隐藏测试严格分离、Grader/错误码/代码哈希、Fake 测试用例；MBPP/MBPP+ 数据抓取与划分脚本（**只写脚本**）、去重与 QA、Teacher 轨迹审查/转换、任务 Manifest、A/B/C/D 运行器、成本/成功率/失败统计、报告生成器。至少正确/边界错/语法错/超时/越权/评分基础设施故障六类测试；严禁在候选容器中挂载参考答案。
+**完成清单：** MBPP/MBPP+ 与 SWE-smith 导入、SWE-Gym 待审适配；仓库快照、提交复原、依赖镜像、补丁边界、公开/独立评分；跨来源仓库族去重、三类资产 Manifest、Teacher 轨迹审核、A/B/C/D 双层报告。保留正确/边界错/语法错/超时/越权/基础设施故障测试，仅使用手写 fixture。
 
 **Stage 1-C Prompt：**
 
-> 以冻结 Contracts 和 `AGENTS.md` 为准，只修改 `execution/data/evaluation/examples/dev` 与对应测试。实现可用的 Docker 评分与私测隔离、MBPP 数据处理脚本、轨迹质量检验、四组基线/评测统计和报告代码；仅使用合成 Fixture 验收正确/错误/超时/越权/INFRA_ERROR，**不下载正式数据/模型**。所有评测必须从实际 Grader 状态产生，不能硬编码 pass；提交 PR、测试证据和风险清单。
+> 以冻结 Contracts 和 `AGENTS.md` 为准，只改 `execution/data/evaluation/examples/dev` 与对应测试。实现函数/仓库 TaskSpec 转换、快照恢复、补丁方向核验、公开与独立评分、跨来源去重和 A/B/C/D 分层报告。用手写小仓库验证初态缺陷、正确修复、回归、超时、越权和 INFRA_ERROR，不下载模型、正式数据或正式任务镜像。不能硬编码通过；交 PR、测试和风险。
 
 #### Stage 1 合并与统一资产接入（A 独占 Gate）
 
@@ -1426,9 +1488,9 @@ Stage / Owner / Branch / Base commit / Final commit
 
 1. **全量代码审核：** 对照第3–16章逐模块核对是否真的有逻辑，检查 import、类型、测试和未实现分支；B/C 不能将真模型必需代码留作“以后再补”。
 2. **先在无模型环境跑全套 Mock/容器安全测试**：`uv sync --locked`、`pytest`、Ruff、CLI Fake Demo、全套异常和回放测试；缺一项则退回责任人。
-3. **A 独自统一下载**已选定的真实 Main Base、Local Frozen Sub 和第一版数据源（只需受控小样本完成真实接口 Preflight，不做正式训练）；记录供应商、模型 ID、revision、校验和、许可证、文件大小、逻辑存储位置、环境变量名及实际下载命令。
+3. **A 独自接入资产：** 确认正式 Qwen 4B 仓库与不可变 revision，登记真实 Main Base、Local Frozen Sub 及受控函数/仓库小样和对应镜像；不做正式训练。未选定模型、仓库起点无法恢复或独立评分未通过时不能发布正式 Gate。
 4. **资产登记与路径统一：** 写 `docs/ASSET_REGISTRY.md` 和 `configs/assets.example.toml`；例如用 `COPATCH_ASSETS_ROOT` 指向用户可设置的资产根目录，配置只写相对路径如 `models/main`、`models/sub_coder`、`datasets/raw/mbpp`，不把本地绝对路径硬编码到代码。
-5. **A 跑真实接口 Preflight：** Main 本地合法 Tool Call；本地 Sub 一次真实生成；Hybrid 至少一次真实在线请求（如有有效 API 凭据）；Grader 实际执行；LoRA SFT 最小数值步及 GRPO 的最小路径合法性检查。若缺 GPU，此处先验证模型加载和训练兼容原型，训练完整闭环仍在 Stage 2。
+5. **A 跑真实接口 Preflight：** Main 本地合法 Tool Call、本地 Sub 真实生成、Hybrid 至少一次真实在线请求（如有有效凭据）、函数/仓库 Grader 实际执行、LoRA 加载/重载及最小训练路径兼容性。实测仓库缺陷快照、镜像平台、基线失败和参考恢复。缺 GPU 时先验证加载和训练接口，正式参数更新与训练成本试点在 Stage 2。
 6. **三人资产策略：** Git **只共享代码、锁文件、下载脚本、Manifest/哈希和配置模板**。**其他成员 clone 后自行下载权重**，通过配置根路径解析；任何人都不向 Git 提交大权重、模型缓存或原始训练数据。所有人固定使用 A 验证过的 model revision/资产规范。
 7. A 记录真实接口输出、未完成项和软硬件约束，Tag `stage1-accepted`，再开放 Stage 2。
 
@@ -1439,10 +1501,10 @@ Stage / Owner / Branch / Base commit / Final commit
 ```text
 $COPATCH_ASSETS_ROOT/
 ├── models/
-│   ├── main_qwen/              # 固定 revision 的 Qwen Base（Main 的 LoRA 另存）
+│   ├── main_qwen/              # 固定 revision 的 Qwen 4B Base（Main LoRA 另存）
 │   └── frozen_sub/             # 若三个角色共用一套冻结模型，可共用此目录
 ├── datasets/
-│   ├── raw/                    # MBPP/MBPP+ 原始下载，仅在授权后拉取
+│   ├── raw/                    # MBPP/MBPP+、SWE-smith；SWE-Gym 审核后接入
 │   └── prepared/               # 按 manifest 清洗后的任务（Stage 2）
 └── checksums/                  # 原始权重/数据校验记录
 
@@ -1455,39 +1517,40 @@ CoPatch-RL/scripts/assets/                # 统一下载、核验、列出文件
 官方权重下载命令**示例**（需先选择最终模型、安装 `huggingface_hub` 的 `hf` 命令，并从官方仓库确认 revision/license）：
 
 ```bash
-# 示例：仅由 A 在 Stage1 代码合并之后运行；revision 必须填写实际固定 commit
-export COPATCH_ASSETS_ROOT="/path/to/copatch-assets"
-export QWEN_MODEL_REVISION="<PINNED_MODEL_COMMIT>"
+# 示例：仅由 A 在 Stage 1 代码合并后运行，先设置并审核这三个变量
+: "${COPATCH_ASSETS_ROOT:?请设置资产根目录}"
+: "${COPATCH_MAIN_MODEL_ID:?请填写已选定的 Qwen 4B 仓库}"
+: "${COPATCH_MAIN_MODEL_REVISION:?请填写实际模型 commit}"
 
-hf download Qwen/Qwen3-1.7B \
-  --revision "$QWEN_MODEL_REVISION" \
+hf download "$COPATCH_MAIN_MODEL_ID" \
+  --revision "$COPATCH_MAIN_MODEL_REVISION" \
   --local-dir "$COPATCH_ASSETS_ROOT/models/main_qwen"
 
 # Stage1 Gate 下载小样本时，使用仓库内已实现的数据抓取/校验脚本。
-# 不假设 MBPP 与 MBPP+ 在不同发布渠道的 split 完全相同。
+# 核对 MBPP 源题 ID，验证 SWE-smith 小样的缺陷快照及固定镜像。
 ```
 
-`docs/ASSET_REGISTRY.md` 每行至少登记：`asset_id / role / source / license / pinned_revision / sha256-or-repo-hash / size / logical_path / download_cmd / verified_at / verifier / status`。**模型文件路径由 `COPATCH_ASSETS_ROOT + logical_path` 解析**；三个 Frozen Sub 可以共享同一套冻结权重、分别使用角色提示与独立 Session，前提是模型适配器保证 Sub 推理不读取 Main LoRA，也不会被训练器优化。若实际选择其他 Main/Sub 型号，应只更新资产登记与配置，不在源码里到处替换硬编码字符串。
+`docs/ASSET_REGISTRY.md` 每行至少登记：`asset_id / role / source / license / pinned_revision / sha256-or-repo-hash / size / logical_path / download_cmd / verified_at / status`。模型另记架构/加载类、tokenizer 与模板 hash、dtype/后端、LoRA 模块与重载结果；仓库环境另记镜像 digest、平台、依赖锁、runner、初始 commit 和快照校验。**模型路径由 `COPATCH_ASSETS_ROOT + logical_path` 解析**。三个 Frozen Sub 可共用权重，但 Prompt、Context 和 Session 独立，不读取 Main LoRA。
 
 其他成员通过 Git 获取登记、脚本和锁文件，并在自己的设备用同一 pinned revision 自行下载；无需复制 A 的资产目录，**也不得使用不受版本控制的权重来跑正式对照**。对于需要授权登录或不可公开的权重，应按许可操作并仅共享可公开的获取步骤。
 
 **Stage 1 Gate Prompt（A 的 Codex，可重复用于合并检查）：**
 
-> 审查 A/B/C 三个 Stage1 PR，严格按目录所有权、冻结 Contracts、`AGENTS.md`、测试和安全门槛合并；先全量 Mock/容器验收。随后按资产清单下载指定版本的 Qwen/冻结 Sub 和小样本数据，记录 hash、许可证、相对目录和实际命令，统一生成 ASSET_REGISTRY；使用本地/在线真实接口跑 Preflight，严格区分 Mock 与实测。没有明确通过证据不得发布 `stage1-accepted`。
+> 审查 A/B/C 三个 Stage 1 PR，先做全量 Mock/容器验收。确认 Qwen 4B 仓库与 revision 后，由 A 接入固定模型、函数和仓库小样及镜像，记录许可、哈希、相对路径、实际命令和预检证据。核对真实 Local/Hybrid、恢复与独立评分，区分 Mock、实测和待验证项；无证据不得发布 `stage1-accepted`。
 
 ### 18.4 Stage 2｜真实数据、LoRA 训练与 Dev 集调参
 
-**前置：** `stage1-accepted` 已发布；所有模型版本、数据许可证、工具协议、评测接口及主实验配置有记录。**此阶段可以下载完整 Train/Dev 数据，但仍不能查看正式 Held-out 私测输出。**
+**前置：** `stage1-accepted` 已发布；模型、数据许可、工具协议、评测接口和起步配置有记录。**此阶段可以下载完整 Train/Dev 数据；只用 Train/Dev 调整配置，不查看正式 Held-out 私测输出。**
 
 #### A：SFT/GRPO、云端与训练诊断
 
 - 在少量题上验证真实 Teacher → Frozen Sub → 工具轨迹；完成 SFT Main LoRA 并保存 `sft_main`。
 - 从共同 SFT Checkpoint 做 GRPO 真实同题多轨迹采样，先观察非零 Advantage，再进行训练更新；保存 `grpo_seed42` 等版本、梯度/旧概率/mask 验证、显存和费用。
-- 在 Dev 集上选择模型/学习率/组大小/预算；如正式训练迁移云 GPU，使用相同 `revision/hash/config`，不可默默变更 Sub。
+- 先实测 4B、共享 Frozen Sub 和两类任务的峰值显存、吞吐与账单；确定实际训练规模、学习率和预算，正式组保留 G=4。云端迁移保留 `revision/hash/config`，任何变更显式登记。
 
 **Stage 2-A Prompt：**
 
-> 基于 `stage1-accepted` 与冻结训练协议，只改 `training/`、训练配置和训练脚本。用真实 Local 任务与 Frozen Sub 生成 SFT，再由 SFT adapter 继续 GRPO；核验 Main-only mask、旧概率、非零优势、LoRA 前后变化、保存/重载、费用/显存。仅用 Train/Dev 调参，产出 SFT/GRPO Checkpoint、曲线、配置及失败报告；不要访问 Held-out 测试。
+> 基于 `stage1-accepted`，只改训练归属文件。实测 Qwen 4B，按第 7、11 章登记目标和可承担规模。用 Teacher Main 和真实 Frozen Sub/工具制作 SFT，再从共同 adapter 新采 G=4 的 GRPO 组；独立统计源题、轨迹、决策、有效 token、零优势组和故障。仅用 Train/Dev，核验 Main-only 梯度、旧概率、重载、显存和费用；交 Checkpoint、配置与失败报告。
 
 #### B：真实模型联调、稳定性与应用验证
 
@@ -1496,27 +1559,27 @@ hf download Qwen/Qwen3-1.7B \
 
 **Stage 2-B Prompt：**
 
-> 基于 `stage1-accepted` 和 ASSET_REGISTRY，自行按 revision 下载所需权重，仅修改 Harness/Model/App 归属代码。在 Train/Dev 下完成 Local+Hybrid 真实运行、Session 回放与恢复、动态/固定调用路径、API 失败/超时/成本记录。定位并修复影响真实 Rollout 的工程缺陷，交逐条 trace、测试结果和独立 PR，不改训练算法与隐藏评分。
+> 基于 `stage1-accepted` 和 ASSET_REGISTRY，按 revision 使用资产，仅修改 Harness/Model/App 归属代码。用函数与仓库 Train/Dev 验证 Local/Hybrid、共享冻结权重下的上下文隔离、补丁反馈、Session 恢复和调用成本。检查离线无 `ask_user`。交脱敏 trace、测试和 PR，不改算法或隐藏评分。
 
 #### C：数据质量、Grader 核对与开发集评测
 
-- 校验 MBPP/MBPP+ 原始 ID、去重、Train/Dev 与保留集隔离，冻结 Manifest/版本；核查 Teacher 轨迹是否真发生和是否有泄漏。
+- 校验 MBPP/MBPP+ 源 ID、SWE-smith 起点与测试、SWE-Gym 可用性，按仓库/问题族去重并冻结分割；核查 Teacher 轨迹和评分隔离。
 - 检查独立评分与 Reward 对齐；在 Dev 集跑四组 A/B/C/D 的代码正确性、协作调用和成本；准备 `per_task`、`summary`、失败分类和 bootstrap 脚本。
 
 **Stage 2-C Prompt：**
 
-> 基于 `stage1-accepted`，只改 `execution/data/evaluation` 和对应测试。校验正式数据划分、参考解与隐藏评分，确保 Teacher/GRPO 轨迹真实且无泄漏；固定 Dev 评测配置，运行 A/B/C/D 开发集，输出逐题结果、分组成本、错误率及失败分析。仅用 Dev 反馈修正数据/评分缺陷；禁止读取或调优 Held-out 结果。
+> 基于 `stage1-accepted`，只改执行、数据和评测归属文件。审计许可、仓库族和问题族；报告三源配比可行性。验证缺陷/修复的执行证据、独立评分和 Teacher/GRPO 资产边界。跑双层 Dev A/B/C/D，交逐题、分组成本和失败原因；不读或使用 Held-out 结果调参。
 
 #### Stage 2 Gate（A 合并放行）
 
 - 合并并冻结：`Main Base revision + SFT adapter + GRPO adapter + Frozen Sub revision + Harness commit + Dataset Manifest`。
 - 必须保存真实 SFT/GRPO 更新证据、有效梯度和 mask、训练种子、费用与失败案例；没有提升也如实记录。
-- A 审核 Dev 对照和评分器的正确性，明确是否需要缩小任务范围/换模型（只在此 Gate 前决定）。
+- A 审核 Dev 对照、评分和全链路成本，确定是否缩小目标规模；任何正式 Qwen 4B 变体变更都需重新通过模型预检并重建可比检查点。
 - **冻结 `eval_protocol.json`，记下四组、指标分母、最终 Test ID、随机种子、预算、失败重试策略。** Tag `stage2-accepted` 后进入 Stage 3；不得再以测试成绩为由改奖励或调参。
 
 **Stage 2 Gate Prompt：**
 
-> 审查并合并 Stage2 的训练、Harness 修复和数据/评测 PR，验证 LoRA 真实参数更新、轨迹/Reward/Mask 的可追溯性、Dev 四组可复现。固定模型/数据/Harness/预算与 `eval_protocol.json`，输出 Stage2 技术验收报告和资产版本对照；不运行最终 Held-out 调参，不夸大不稳定的 RL 改进。
+> 审查 Stage 2 的训练、Harness 和评测 PR，验证 4B Main LoRA 更新、G=4 轨迹/Reward/Mask、Dev 双层四组和实际预算。冻结模型、资产、两层 Test 的 ID/分母与 `eval_protocol.json`；登记未达目标及原因。最终 Held-out 不用于调参。
 
 ### 18.5 Stage 3｜正式保留集、Hybrid 展示与最终交付
 
@@ -1529,7 +1592,7 @@ hf download Qwen/Qwen3-1.7B \
 
 **Stage 3-A Prompt：**
 
-> 以 `stage2-accepted` 冻结协议为准，负责最终集成、模型与训练结果审计、研究报告和合并。确认 A/B/C/D 只有受控变量差异，核对两种子、费用、成功数、失败与 Main-only 更新证据。不得因 Held-out 结果修改训练方法；标注实际完成/未完成，形成可复现的最终技术结论。
+> 以 `stage2-accepted` 为准，核对双层 A/B/C/D、D vs C、实际种子、费用和 Main-only 更新证据。12 个探索案例单列，说明哪些目标没有达成。不得按 Held-out 改训练，交可复现报告与集成 PR。
 
 #### B：在线应用与演示交付
 
@@ -1538,16 +1601,16 @@ hf download Qwen/Qwen3-1.7B \
 
 **Stage 3-B Prompt：**
 
-> 基于冻结版本只完成 `app/models/harness` 的交付修复与在线演示，使用真实在线 Sub-Agent 完成输入→委派→编码→公开测试→提交的全流程；输出脱敏调用记录、录屏脚本、运行配置和异常示例。不可修改算法或评测协议，不得将 Mock 伪装为在线调用。
+> 基于冻结版本只完成 `app/models/harness` 的交付修复与真实 Hybrid 演示，记录输入→委派→编码→公开测试→提交。若有可选 `ask_user`，只演示应用入口，勿混入自动对照。输出脱敏请求、录屏脚本、配置和异常示例，不改算法或评测协议。
 
 #### C：冻结保留集与复现评测
 
-- 运行 Held-out F 与小工程 Held-out M 的 A/B/C/D 配对测试；对本地与 Hybrid 分表；有条件时进行去 Reviewer/Planner 消融。
+- 运行函数级与仓库级 Held-out 的 A/B/C/D 配对测试；Local 与 Hybrid 分表，12 道小工程另作探索；预算允许再做去 Reviewer/Planner 消融。
 - 输出实际 `per_task.jsonl`、`summary.json`、`cost.csv`、`failures.md`、图表和来源/哈希；对异常/超时按协议记账，不删失败。
 
 **Stage 3-C Prompt：**
 
-> 依据冻结 `eval_protocol.json` 和 `stage2-accepted`，只运行已冻结的 `evaluation/execution/data` 实现并生成评测产物；原则上不再修改评分/协议代码（确有修复须另开有证据的勘误并全部重评），运行 Held-out A/B/C/D，保存完整逐题结果、成功率、修复率、委派/Token/时间/成本及失败报告；运行被允许的消融与重复种子。按既定分母报告所有失败，不以最终结果调整数据、模型或评分器。
+> 按冻结协议运行函数与仓库 Test A/B/C/D，保存 All-pass、Fix、Regression、有效委派分析、工具/Token/延迟/成本和失败记录；另报 Hybrid 和探索案例。按既定分母报告所有失败，不依成绩改数据或模型。确有评分勘误须另开记录并按新版本对相关组全部重评。
 
 #### Stage 3 最终 Gate（A）
 
@@ -1581,7 +1644,7 @@ uv run --group train copatch train --stage grpo --config configs/grpo_local.toml
 
 # Stage3：冻结结果与查看轨迹
 uv run --group train copatch evaluate --config configs/eval_local.toml
-uv run copatch inspect --episode-id <episode_id>
+uv run copatch inspect --episode-id "<episode_id>"
 ```
 
 `copatch assets verify` 等是**代码需要实现的 CLI 合同**，不保证当前已经存在。`assets.example.toml` 为示例模板；真实路径通过 `.env` 或本地未跟踪配置注入，切勿把绝对路径和下载缓存提交给 Git。
@@ -1630,7 +1693,7 @@ uv run copatch inspect --episode-id <episode_id>
 | 机动 | 50 | 失败重跑和环境问题 |
 | **合计** | **300** | **不得未经批准超额** |
 
-**先算真实全链路成本：** Main 模型生成、三 Frozen Sub 生成、真实工具测试、训练反传和最终评测都可能计费。开始云训练前必须用 2–4 个小任务测每 Episode 的总耗时、显存和费用。GPU 租金受平台/型号/地区波动，不能预先保证 300 元内完成所有模型/种子的实验。
+上述额度是第 11 章同一笔预算，不重复相加。按第 11 章用函数和仓库试点测 4B、Teacher、Frozen Sub、镜像与评分的全链路开销。未核算全规模及重试余量前不承诺 ¥300 可覆盖目标。
 
 ### 19.5 风险与回退
 
@@ -1638,17 +1701,17 @@ uv run copatch inspect --episode-id <episode_id>
 |---|---|---|
 | Stage 1 并行合并冲突 | 修改同一 Contracts/lock/shared config | 固定所有权，跨模块变更请求给 A；各自 Worktree 不动其他目录 |
 | 大模型/完整数据太早下载 | 阶段未完成就出现权重缓存、仓库臃肿 | Stage 1 工作分支禁下载；A 在合并 Gate 后统一登记，其他成员各自下载 |
-| Qwen 太弱 | 不合法 Action、无效委派 | 先 SFT 结构化动作，验证 Sub 与任务分层，再升级 Main 候选 |
+| Qwen 4B 或 Sub 不可用 | 工具不合法、修复失败或无法重载 | 查模板、SFT 与 Sub 能力；正式变体更换需重新预检 |
 | RL 全零/全一组 | 无有效相对优势 | 查评分器、SFT/任务难度、模型调用和轨迹完整性，不能用 Test 挑题 |
 | SQLite/JSONL 不一致 | 会话索引缺事件、重放失败 | 事件日志为原始记录，重建索引；检查中断写入与恢复 |
 | Local 与 Hybrid 差异 | 在线 Sub 更强且费用更高 | 独立报表；迁移用同在线模型比较 C/D |
-| 成本/时间超出 | 每次 Rollout 远超预计 | 先降 group/长度/任务数、压缩额外消融；不删真实梯度和评分隔离 |
+| 成本/时间超出 | Rollout、镜像或评分远超预计 | 按第 11 章先裁可选实验，再冻结较小双层规模；正式组保留 G=4 |
 | 成绩不改善 | D≈C 或 C>B | 如实报告；分析策略与失败，不造假或事后改 Test 协议 |
 | 安全或隐私泄漏 | 私测/Key/权重进 Git 或模型上下文 | 立即阻断合并，清理污染并重新核对资产与历史记录 |
 
 ### 19.6 范围裁剪优先级
 
-**保留：** Python 任务真实端到端运行、一个真在线 API、Main+3Sub 动态决策、可信 Grader、Session/Context/Events、Main LoRA 的 SFT/GRPO、A/B/C/D 基线与实际测试结论。**优先裁剪：** MCP 外部生态、界面装饰、额外模型/超参网格、完整大仓库 Benchmark、非核心消融和长程记忆。
+**保留：** 真实在线应用、1+3 Harness、可信 Grader、Main LoRA 的 SFT/GRPO、双层 A/B/C/D 主对照。**优先裁剪：** 可选交互、UI 装饰、额外消融和额外种子；再按第 11 章冻结缩小后的数据规模。无法完成的部分单列，不用接口预检或探索案例替代正式实验。
 
 ---
 
@@ -1676,13 +1739,13 @@ uv run copatch inspect --episode-id <episode_id>
 - Main 的状态/观察/动作/奖励/环境建模与真实多轮 Agentic Rollout；
 - SFT 轨迹来源、Main-only Label Mask、训练曲线和 SFT Checkpoint；
 - GRPO 同题组采样、真实奖励、组相对优势、旧概率与 Mask 对齐；
-- Qwen Base 和三个 Sub 冻结，仅 Main LoRA 前后变化及重载证据；
+- Qwen 4B 底座和三个 Sub 冻结，仅 Main LoRA 前后变化及重载证据；对照规划与实际任务、轨迹和决策样本数；
 - 训练种子、实际设备/GPU 小时、成本、错误与失败记录；
 - Dev 超参数选择与冻结 Held-out 评测结果严格区分。
 
 ### 20.4 独立评测与研究报告
 
-**固定 A/B/C/D**，报告逐题 All-pass、初版正确率、Fix/Regression、Sub-Agent 调用分布、Token/时间/现金成本、训练稳定性；按条件和任务类型拆分，不能混合 Local/Hybrid。模型未改善或性能下降也必须保留完整证据。
+**固定 A/B/C/D，D vs C 为主比较。** 报告逐题 All-pass、初版正确率、Fix/Regression、委派、工具次数、Token、延迟、每成功任务成本与稳定性。函数级和仓库级分别报告，Local/Hybrid 分表，12 个工程案例单列；保留未改善与失败证据。
 
 **报告推荐结构：** 背景和假设 → 1+3 Harness → 数据与 SFT → GRPO → 实验协议 → 主结果 → 委派策略与成本 → 消融/失败 → 局限与复现。
 
@@ -1728,8 +1791,10 @@ uv run copatch inspect --episode-id <episode_id>
 | [OpenHands SDK](https://github.com/OpenHands/software-agent-sdk) · [Agent 架构说明](https://github.com/OpenHands/docs/blob/main/sdk/arch/agent.mdx) | Typed Action/Event、Context Condenser、Workspace | 事件类型、上下文压缩 | 自研轻量可回放 Harness |
 | [Hugging Face TRL GRPO](https://huggingface.co/docs/trl/grpo_trainer) | 多轮环境/工具调用与 GRPO | `GRPOTrainer`, `environment_factory` 等 | 实际训练框架（按锁定版本核对） |
 | [Hugging Face PEFT](https://huggingface.co/docs/peft/quicktour) | LoRA/QLoRA | `LoraConfig`, adapter load/save | 只更新 Main 的 LoRA |
-| [Qwen3-1.7B](https://huggingface.co/Qwen/Qwen3-1.7B) · [Qwen3.5-2B](https://huggingface.co/Qwen/Qwen3.5-2B) | Main 候选底座 | 模型卡、架构、模板、tokenizer | 按设备和兼容试点选择其一 |
+| [Qwen 官方模型目录](https://huggingface.co/Qwen) | Main 正式目标为 Qwen 4B | 待选变体的模型卡、架构、模板、tokenizer | 仓库和 revision 由资产 Gate 核验后登记，不在文档中预选 |
 | [MBPP](https://github.com/google-research/google-research/blob/master/mbpp/README.md) · [MBPP+](https://huggingface.co/datasets/evalplus/mbppplus) | 小型编程题与测试 | 源 ID、数据字段、许可证 | 构造可信 Python 任务与测试 |
+| [SWE-smith Python 数据](https://huggingface.co/datasets/SWE-bench/SWE-smith-py) · [环境构建](https://swesmith.com/guides/env_construction/) · [评分实现](https://github.com/SWE-bench/SWE-smith/blob/main/swesmith/harness/utils.py) | 合成缺陷的仓库修复 | 实例分支、注错补丁、镜像与测试恢复 | 正式接入；按第 6–7 章适配并独立评分 |
+| [SWE-Gym 数据](https://huggingface.co/datasets/SWE-Gym/SWE-Gym) · [评测实现](https://github.com/SWE-Gym/SWE-Bench-Fork/blob/main/swebench/harness/test_spec.py) | 真实仓库修复训练集 | 修复前 commit、参考修复与测试补丁 | 候选来源，审核通过才纳入 |
 | [SWE-bench 基准局限讨论 (2026)](https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/) | 公开基准污染、测试可信性 | 基准质量审计思路 | 强调任务审核与独立保留评测 |
 | [Docker 运行限制文档](https://docs.docker.com/engine/containers/run/) | 执行隔离与资源约束 | 网络、用户、卷、CPU/memory/pid | 安全执行验证 |
 | [uv 项目管理](https://docs.astral.sh/uv/guides/projects/) | 独立工程、依赖锁 | 包管理/锁文件 | 三人环境一致 |
@@ -1752,9 +1817,10 @@ uv run copatch inspect --episode-id <episode_id>
 |---|---|---|
 | 本地设备 | Python 3.11, uv, Git, Docker 客户端/服务端 | `python --version`, `uv --version`, `docker version` |
 | 基础依赖 | Pydantic, HTTPX, Typer, pytest, Ruff | `uv sync --locked`, `uv run pytest` |
-| Local 推理 | 与 Qwen 模型卡兼容的 Transformers / torch | 模型、tokenizer、模板、停止原因 |
-| SFT/GRPO | PEFT, TRL, datasets + PyTorch | 精确锁版本、真实 LoRA 反传、保存重载 |
-| Cloud CUDA | 4090 或等价设备与 CUDA 驱动 | `torch.cuda.is_available()`, 实际显存和可用空间 |
+| Local 推理 | 与所选 Qwen 4B 兼容的 Transformers / torch | 固定仓库/revision、权重校验、tokenizer/模板、合法动作 |
+| SFT/GRPO | PEFT, TRL, datasets + PyTorch | 精确锁版本、Main-only LoRA 反传、保存重载 |
+| Cloud CUDA | 待试点的单卡实例与 CUDA 驱动 | `torch.cuda.is_available()`、全链路峰值显存、吞吐和可用空间 |
+| 仓库执行 | 固定 digest 的镜像与 runner | 平台、依赖、缺陷快照、基线失败和参考恢复 |
 | Hybrid | 在线供应商密钥（环境变量） | 请求成功、返回型号、计费与异常捕获 |
 
 ### B.2 推荐的命令顺序（真实文件创建后执行）
@@ -1787,17 +1853,17 @@ PY
 ### B.3 Stage 1 合并与资产 Gate / 正式 RL 前的 preflight
 
 - [ ] Stage1 三个 PR 已合并且 `stage1-accepted` 的准备检查通过；
-- [ ] `docs/ASSET_REGISTRY.md` 明确模型来源、revision、校验和、逻辑路径与下载命令；
+- [ ] `docs/ASSET_REGISTRY.md` 明确 Qwen 4B 仓库、revision、权重/模板校验和、逻辑路径与命令；
 - [ ] 本地 `COPATCH_ASSETS_ROOT` 正确，权重/数据/数据库不在 Git 中；
 - [ ] `TaskSpec.public_view()` 无隐藏测试字段；
 - [ ] Docker 反例隔离与超时回收通过；
 - [ ] Local Main 生成的工具请求能真实执行；
 - [ ] Frozen Sub 与 Main 的上下文互相隔离；
 - [ ] SFT 中只训练 Main adapter，模型重载可用；
-- [ ] Grader 评分与参考/错误样本相符；
+- [ ] 函数和仓库 Grader 与参考/错误样本相符；仓库镜像和快照可复原，私测隔离；
 - [ ] `rollout` 保存真实生成 token、旧概率、policy 版本、行动结果；
-- [ ] GRPO 最小样本的梯度与 LoRA 更新正确；
-- [ ] 训练预算/正式评测协议已冻结或有明确冻结时间点。
+- [ ] Stage 2 试点：真实 GRPO 梯度、G=4 初态与独立性、LoRA 更新和重载可验证；
+- [ ] Stage 2 放行：记录实际规模、预测与实付成本，并冻结两层评测协议。
 
 ---
 
@@ -1856,13 +1922,14 @@ PY
 
 ```python
 # 以下是测试目标，不是能直接运行的完整实现
-assert all(not p.requires_grad for p in base_model.parameters())
+assert all(not p.requires_grad for p in original_base_parameters)
 assert all(not p.requires_grad for p in frozen_subagent_parameters)
 assert trainable_parameter_count(main_adapter) > 0
 assert private_test_bytes_not_in_candidate_workspace()
 assert invalid_path_is_rejected('../../secrets.txt')
 assert public_test_feedback_is_bound_to_code_hash()
 assert trajectory_group_has_identical_root_snapshot()
+assert each_rollout_has_independent_workspace_and_session()
 assert each_train_segment_has_matching_context_and_old_logprobs()
 assert all(mask == 0 for mask in frozen_subagent_token_segments)
 assert checkpoint_reload_restores_main_adapter()
@@ -1885,8 +1952,9 @@ mode = "local"
 policy_role = "main"
 
 [model]
-base_model = "Qwen/Qwen3-1.7B"
-base_revision = "RECORD_ACTUAL_REVISION"
+base_family = "Qwen 4B"
+base_model = "<待选 Qwen 4B 仓库>"
+base_revision = "<待选不可变 revision>"
 sft_adapter = "artifacts/adapters/sft_main"
 
 [agents]
@@ -1895,7 +1963,7 @@ coder_provider = "local_frozen"
 reviewer_provider = "local_frozen"
 
 [rollout]
-num_generations = 2
+num_generations = 4
 max_main_steps = 8
 max_sub_calls = 4
 max_public_tests = 2
@@ -1911,11 +1979,13 @@ clip_epsilon = 0.2
 reward_mode = "binary_all_pass"
 
 [experiment]
-train_manifest = "datasets/manifests/train.jsonl"
+train_manifest = "datasets/manifests/grpo_train.jsonl"
+target_distinct_tasks = 800
+target_complete_rollouts = 3200
 output_dir = "artifacts/experiments/grpo_seed42"
 ```
 
-**规范：** 正式训练配置**不应携带 held-out Test manifest**；只有独立评测入口可以读取最终保留集。训练/超参搜索时必须避免通过任何字段意外加载 Test。
+**规范：** 该示例不可直接运行；模型占位值必须先经资产 Gate 填实。SFT 使用独立的训练任务/监督轨迹 Manifest（规划 1,000 道源题、约 2,000 条轨迹）；GRPO 清单引用 Train 源题，采样时不读取 SFT 轨迹作为旧策略输出。Smoke 另用独立配置。训练配置不携带 Test Manifest；离线入口不注册 `ask_user`。
 
 ### D.2 配置版本与统计口径
 
@@ -1929,11 +1999,11 @@ output_dir = "artifacts/experiments/grpo_seed42"
 | B | 规则调度 | 3 Sub | 无训练 | 固定 MAS |
 | C | SFT LoRA | 3 Sub | 无 RL | 动态 SFT |
 | D42 | GRPO LoRA seed42 | 3 Sub | 0/1 正确性 | 动态 RL |
-| D43 | GRPO LoRA seed43 | 3 Sub | 0/1 正确性 | 第二种子 |
+| D43（可选） | GRPO LoRA seed43 | 3 Sub | 0/1 正确性 | 预算允许时的独立复核 |
 | D-noR | 固定 D 策略 | 移除 Reviewer | 无额外训练 | 消融，不可混入主四组 |
 | D-noP | 固定 D 策略 | 移除 Planner | 无额外训练 | 消融 |
 | E（可选） | Continued-SFT | 3 Sub | 无 RL | 排除训练量解释 |
-| H-C/H-D（可选） | C/D Main | 同一在线 3 Sub | 不训练 | Hybrid 迁移对照 |
+| H-C/H-D | C/D Main | 同一在线 3 Sub | 不训练 | Hybrid 迁移对照，预算不足时标注实际覆盖 |
 
 ---
 
@@ -1950,6 +2020,7 @@ output_dir = "artifacts/experiments/grpo_seed42"
 | Coder 初版不错，Reviewer 导致改坏 | 审查意见无证据、Main 盲信意见 | 审查 hash、回归率、去 Reviewer 消融 |
 | 训练全零奖励 | 模型没有提交、模型太弱、任务太难、环境评分失败 | 合法调用→Sub 代码→测试运行→Grader→训练任务难度 |
 | 训练全一奖励 | 任务太简单、公开/私测不区分、数据泄漏 | 真正的独立私测、同组结果分布、去重 |
+| 仓库缺陷态与恢复态得分相同 | 初始 commit/补丁方向、镜像或测试恢复不匹配 | 查数据 revision、缺陷快照 hash、镜像与 runner；先复现基线失败和参考恢复 |
 | Loss finite，但 LoRA 没变 | 优化器没覆盖 adapter、冻结错误、未 optimizer.step | 参数列表、梯度范数、权重哈希前后 |
 | LoRA 改了但指标不变 | reward 稀疏、数据小、模型只学格式、评测功效不足 | Main 策略行为变化、分层结果、区间 |
 | GRPO logprob 对不上 | 丢失真实上下文、tokenizer 重编码、跨调用拼接 | 每段生成时的 token IDs/old logprobs/role/mask |
@@ -1977,7 +2048,7 @@ output_dir = "artifacts/experiments/grpo_seed42"
 3. **更复杂动态编排：** 根据任务动态创建工具型子 Agent、并行独立搜索与结果合并；需处理并发成本与协调冲突。
 4. **Harness 与策略共同优化：** Context Compaction 策略、工具 schema 与模型权重联合实验；由于 Harness 版本会影响 RL 控制变量，本期先冻结。
 5. **长程 Repo-level Coding：** 用更复杂、独立审核的真实仓库问题，增加多文件依赖、运行环境与长时任务恢复。
-6. **更大/混合架构的 Main：** 4B/8B 模型、长序列 QLoRA、分布式/异步 rollout；先完成 1–2B 可复现基线。
+6. **更大/混合架构的 Main：** 先验证本期 Qwen 4B，再考虑更大模型、长上下文或分布式/异步 rollout。
 7. **过程级 Reward / 反事实委派：** 在控制相同中间前缀时研究哪次委派真正提高成功率，而不是只凭最终团队奖励作因果归因。
 8. **MCP 工具生态与跨任务长期记忆：** 仅在 Coding 环境成熟、独立模型训练已完成后考虑；不要牺牲本期专注度。
 
@@ -1991,15 +2062,14 @@ output_dir = "artifacts/experiments/grpo_seed42"
 | **Agent 架构** | 1 Main + 3 Frozen Sub（Planner/Coder/Reviewer） |
 | **训练参数** | Qwen 底座冻结，仅 Main LoRA 做 SFT → GRPO |
 | **Harness** | 独立轻量工程；Loop/Tool/Session/Context/Event/Workspace/Checkpoint |
-| **原有代码** | 新仓库 + 选择性借鉴 其他仓库，**不直接依赖旧项目** |
-| **训练数据** | 可信 Coding 任务、真实 Main SFT 示范、真实多轮 GRPO Rollout |
+| **训练数据** | MBPP + SWE-smith；SWE-Gym 和 20/40/40 待审。SFT 约 1,000 题/2,000 条，GRPO 约 800 题/G=4/3,200 条新采轨迹 |
 | **评分** | 公开测试供决策；隐藏测试由独立 Grader 终局评分，不泄漏 |
 | **两种模式** | Local 供 RL 核心实验，Hybrid 供真实在线演示与单独迁移评测 |
-| **模型大小** | 0.6B 冒烟；1.7B / 2B 看兼容与预算试点；不预先保证 2B 可训 |
-| **正式对照** | A 单 Agent、B 固定 MAS、C 动态 SFT、D 动态 GRPO；继续 SFT 可选 |
+| **正式模型** | Qwen 4B，模型仓库/revision 待选；GPU、LoRA 注入与训练兼容性待实测 |
+| **正式对照** | A 单 Agent、B 固定 MAS、C 动态 SFT、D 动态 GRPO；D vs C 为主。函数/仓库两层，Dev 100–150、Test 200–300 为总规划；12 个自建工程题另报 |
 | **团队职责** | Bootstrap 由 A 初始化；Stage1–3 三人独立 Worktree+目录所有权，均由 A 审查合并；A：架构/训练，B：Harness/API，C：Data/Executor/Eval |
-| **上线范围** | 真实 Python Coding、完整执行/评测、简洁 CLI/Web，优先功能与算法证据 |
-| **费用/时间** | 新增现金 ≤ ¥300；Bootstrap → Stage1（全部代码）→ 资产接入 Gate → Stage2（训练）→ Stage3（评测交付），目标 2026-12-02 |
+| **上线范围** | 真实 Python Coding、完整执行/评测、CLI/Web；`ask_user` 可选且只在交互式应用启用 |
+| **费用/时间** | 新增现金 ≤ ¥300，实测后冻结实际规模；Bootstrap → Stage 1 → 资产 Gate → Stage 2 → Stage 3，目标 2026-12-02 |
 
 > **一句话封存：** CoPatch-RL 不是“用四个模型写代码的 Demo”，也不是“给现成 Coding LLM 随便做点 LoRA”。它是一套可复现的实验型 Coding Agent Harness：**让小模型 Main 在真实多智能体协作中学习何时委派、如何利用反馈和何时停止，最终通过可验证编程成功率、成本与对照实验来检验 Agentic RL 的价值。**
 

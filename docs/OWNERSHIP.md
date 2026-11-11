@@ -2,9 +2,9 @@
 
 | 负责人 | 文件和目录 | Stage 1 责任 |
 | --- | --- | --- |
-| A | `src/copatch_rl/__init__.py`、`src/copatch_rl/contracts.py`、`src/copatch_rl/training/`、`scripts/assets/`、`configs/`、根目录工程配置与依赖锁、Bootstrap 公共文档、`tests/test_contracts.py`、`tests/test_training_*`、`tests/conftest.py`、`tests/fixtures/bootstrap_cases.json` | 公共契约、Main LoRA 训练、资产工具和集成审查 |
-| B | `src/copatch_rl/{core,harness,agents,models,app}/`、`tests/test_harness_*`、`tests/test_models_*`、应用专属测试、`docs/demo.md` | Main/Sub 运行、Local/Hybrid 适配、JSONL/SQLite、CLI/Web |
-| C | `src/copatch_rl/{execution,data,evaluation}/`、`tests/test_execution_*`、`tests/test_data_*`、`tests/test_eval_*`、`examples/dev/` | Docker 隔离、公开测试与私测评分、数据和对照评测 |
+| A | `src/copatch_rl/__init__.py`、`src/copatch_rl/contracts.py`、`src/copatch_rl/training/`、`scripts/assets/`、`configs/`、根目录工程配置与依赖锁、Bootstrap 公共文档、`tests/test_contracts.py`、`tests/test_training_*`、`tests/conftest.py`、`tests/fixtures/bootstrap_cases.json` | 公共契约及仓库任务扩展审核、Qwen 4B Main LoRA、GRPO 分组、资产工具和集成审查 |
+| B | `src/copatch_rl/{core,harness,agents,models,app}/`、`tests/test_harness_*`、`tests/test_models_*`、应用专属测试、`docs/demo.md` | Main/Sub 运行与角色状态隔离、函数及仓库任务公开视图、Local/Hybrid 适配、JSONL/SQLite、CLI/Web |
+| C | `src/copatch_rl/{execution,data,evaluation}/`、`tests/test_execution_*`、`tests/test_data_*`、`tests/test_eval_*`、`examples/dev/` | Docker 隔离、函数及仓库执行、快照复原、独立评分、来源去重与分层评测 |
 
 ## 一、分支与公共接口
 

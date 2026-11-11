@@ -1,13 +1,13 @@
 # CoPatch-RL · AGENTS.md
 
-> 本规范适用于该仓库内所有 Coding Agent 与团队成员。先阅读 [V2 实施方案](docs/copatch_rl_v2.md) 的一页总览和第 16–19 章，并核对 [阶段门槛](docs/PLAN.md)、[文件所有权](docs/OWNERSHIP.md) 与当前基线的 `src/copatch_rl/contracts.py`。
+> 本规范适用于该仓库内所有 Coding Agent 与团队成员。先阅读 [V2.1 实施方案](docs/copatch_rl_v2.md) 的一页总览和第 16–19 章，并核对 [阶段门槛](docs/PLAN.md)、[文件所有权](docs/OWNERSHIP.md) 与当前基线的 `src/copatch_rl/contracts.py`。模型和数据以实施方案第 5–7 章为准。
 
 ## 项目范围
 
-- **1 Main + 3 Frozen Sub-Agent**（Planner / Coder / Reviewer），仅训练 Main Qwen 的 LoRA。
+- **1 Main + 3 Frozen Sub-Agent**（Planner / Coder / Reviewer），正式 Main 目标为 Qwen 4B，仅训练 Main LoRA。
 - Harness 同时支持 Local 冻结模型与 Hybrid 在线 LLM；训练与评测分开，所有结果必须真实、可追溯。
 - Bootstrap → Stage 1（全部代码实现）→ 资产下载与接口 Gate → Stage 2（SFT/GRPO + Dev）→ Stage 3（Held-out 与交付）。
-- 非当前 Stage 的新需求不可擅自实现。Bootstrap 和 Stage 1 工作分支不得下载模型权重或正式数据。Stage 1 代码合并后的资产预检由 A 负责。
+- 非当前 Stage 的新需求不可擅自实现。Bootstrap 和 Stage 1 工作分支不得下载模型权重、正式数据或正式任务镜像。Stage 1 代码合并后的资产预检由 A 负责。
 
 ## 文件所有权
 
