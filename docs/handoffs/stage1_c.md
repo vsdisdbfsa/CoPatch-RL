@@ -1,0 +1,31 @@
+﻿
+## C-05 增补（2026-11-12）
+- Stage 1 / C / stage1/c-eval；base 55de863；未提交、未推送。
+- 新增 execution/grader.py、tests/test_execution_grader.py。
+- 新增手写 tests/fixtures/private/grader_cases.json（非正式数据，未被 gitignore）。
+- 未修改 Contracts、C-01～C-04、锁文件或 A/B 模块；未新增 examples 文档。
+- score(snapshot_id, task_id) 仅返回现有 GraderResult 三字段。
+- 注入 Mapping snapshot store；Frozen 注册 task、snapshot、hash、提交标志。
+- 拒绝 task/ID/hash 不匹配、未提交、非规范路径；不实现持久化或重启查找。
+- 宿主必须只注册已冻结且审核为公开源码的 Snapshot；不能把私测加入源码清单。
+- 函数逐输入经 Sandbox Docker 调用；期望值与整套私测留宿主比较。
+- 候选 stdout/stderr 丢弃；独立管道返回不可信函数值，宿主判断而非打印报告。
+- 返回 SUCCESS/TEST_FAILED/INVALID_CODE/TIMEOUT/INFRA_ERROR；细节只在内部 Detail。
+- 仓库注入诊断适配器，仅传公开/上游 node ID；不得将私测脚本交给此适配器。
+- 核对固定 F2P/P2P 集、重复/缺失/收集失败；仅 passed 计实际诊断通过。
+- skip/xfail/xpass/失败不计通过；所有仓库结果最终均 INFRA_ERROR + Diagnostic。
+- 复用 C-04 diagnostic_only 结论，未尝试解决报告边界，不产出仓库 SUCCESS。
+- 先写六失败场景；实现前因 grader 模块不存在收集失败（未冒称六项断言已运行）。
+- 六场景：错 hash、空套件、私测泄漏、回归、超时、基础设施故障。
+- 中间修正 fixture BOM、测试导入和泄漏反例匹配自身标记的问题。
+- 专项最终 19 passed：12 逻辑/Mock，7 Docker 开关集成用例。
+- 7 集成用例中语法错误静态拒绝；其余 6 实际执行容器（含仓库诊断）。
+- 实测正确、错误、死循环、提前退出空值、候选空间无私测、仓库全过仍 Diagnostic。
+- COPATCH_DOCKER_TESTS=1；全量一次：146 passed、2 skipped，40.41s。
+- uv run --locked pytest -q：退出 0；Ruff check 全部通过，format --check 16 文件通过。
+- git diff --check 通过；git check-ignore fixture 退出 1 表示未忽略，非测试失败。
+- 2 skip 仍为 C-01 Windows 符号链接权限，未宣称验证。
+- 镜像复用已存在 python:3.11-slim / copatch-public-pytest:dev；本轮未下载资产。
+- A/B 待确认：只由可信 Trainer/Evaluation 消费 GraderResult；Detail 不回流模型。
+- 未验证：正式数据评分、仓库可信成功、恶意候选对值通道的全面攻击防护。
+- Backlog：快照持久化/重启恢复及仓库跨进程可信评分边界，留待另轮授权。
