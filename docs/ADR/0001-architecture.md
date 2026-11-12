@@ -8,12 +8,13 @@
 
 - 使用 **1 Main + 3 Frozen Sub-Agent**。Main 通过类型化动作调用 Planner、Coder、Reviewer 及受控工具。每局的调用顺序由 Main 根据公开反馈和预算决定。
 - Local 和 Hybrid 共用 Harness 及模型响应协议。Local 使用本地冻结 Sub-Agent，Hybrid 仅替换 Sub 后端。两种模式分别记录结果。
-- 冻结 Qwen 底座和 Sub-Agent，仅训练 Main LoRA。训练器复用真实运行入口和独立 Grader。逐段保留 Main 生成上下文、token 和旧 logprob，使训练与实际采样对齐。
+- 正式 Main 目标为 Qwen 4B。具体模型仓库、变体、不可变 revision 和校验和由资产预检确定。冻结底座和 Sub-Agent，仅训练 Main LoRA。训练器复用真实运行入口和独立 Grader。逐段保留 Main 生成上下文、token 和旧 logprob，使训练与实际采样对齐。
 - 候选代码由 Docker 隔离。提交冻结快照，独立评分服务读取私测。模型视图只保留公开任务、代码和公开工具反馈。
+- 函数题和仓库修复共享任务视图及执行接口。仓库恢复信息与独立评分资产由宿主记录关联。测试协议按来源和任务类型登记。
 - 追加式 JSONL 保存原始事件，SQLite 提供运行元数据及可重建索引，工作区和快照留在文件系统。
 
 ## 三、验收影响
 
 Bootstrap 用契约与 Mock 贯通共享数据形状。Stage 1 实现并验证实际组件、权限与恢复路径。Stage 2 提供真实参数更新与 Dev 对照证据，Stage 3 按冻结协议验证最终指标。公共接口由 A 维护，B/C 各自实现归属模块。
 
-依据 [V2 实施方案](../copatch_rl_v2.md) 第 3–6、8–9、16–18 章。
+依据 [V2.1 实施方案](../copatch_rl_v2.1.md) 第 3–9、16–18 章。
