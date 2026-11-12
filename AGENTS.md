@@ -1,6 +1,6 @@
 # CoPatch-RL · AGENTS.md
 
-> 本规范适用于该仓库内所有 Coding Agent 与团队成员。先阅读 [V2.1 实施方案](docs/copatch_rl_v2.md) 的一页总览和第 16–19 章，并核对 [阶段门槛](docs/PLAN.md)、[文件所有权](docs/OWNERSHIP.md) 与当前基线的 `src/copatch_rl/contracts.py`。模型和数据以实施方案第 5–7 章为准。
+> 本规范适用于该仓库内所有 Coding Agent 与团队成员。先阅读 [V2.1 实施方案](docs/copatch_rl_v2.1.md) 的一页总览和第 16–19 章，并核对 [阶段门槛](docs/PLAN.md)、[文件所有权](docs/OWNERSHIP.md) 与当前基线的 `src/copatch_rl/contracts.py`。模型和数据以实施方案第 5–7 章为准。
 
 ## 项目范围
 

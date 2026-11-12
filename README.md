@@ -20,7 +20,7 @@ uv run pytest -q
 
 ## 开发入口
 
-- [V2.1 实施方案](docs/copatch_rl_v2.md)（优先阅读总览、第 5–7 章和第 16–19 章）
+- [V2.1 实施方案](docs/copatch_rl_v2.1.md)（优先阅读总览、第 5–7 章和第 16–19 章）
 - [功能范围与 Stage 1 接口](docs/SPEC.md)
 - [阶段门槛](docs/PLAN.md)与[模块所有权](docs/OWNERSHIP.md)
 - [架构决策](docs/ADR/0001-architecture.md)与[资产登记模板](docs/ASSET_REGISTRY.md)

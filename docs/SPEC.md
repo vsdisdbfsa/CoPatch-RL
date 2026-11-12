@@ -29,4 +29,4 @@ Bootstrap 提供可导入的 [公共契约 v1](../src/copatch_rl/contracts.py)�
 | C | `Executor.run_public_tests(workspace_id, suite_id)`、`Grader.score(submitted_snapshot_id, task_id) -> GraderResult`、`EvaluationRunner.run(condition_id, task_manifest)` | 提供函数和仓库任务的隔离执行、公开反馈、终局私测与分层对照。区分候选失败和基础设施故障。 |
 | A | `TrainingAdapter.sample_group(task_id, policy_version, group_size) -> list[Trajectory]`，以及 SFT/GRPO、Reward 和 Checkpoint | 复用 B 的运行入口和 C 的终局评分，验证同题采样、Main-only mask、旧 logprob、参数冻结和恢复。 |
 
-技术细节与最终指标见 [V2 实施方案](copatch_rl_v2.md)，阶段门槛见 [PLAN](PLAN.md)。
+技术细节与最终指标见 [V2.1 实施方案](copatch_rl_v2.1.md)，阶段门槛见 [PLAN](PLAN.md)。
