@@ -61,3 +61,35 @@
 - Ruff check 全部通过；format --check 18 files already formatted；diff --check 通过。
 - 未验证：真实来源版本字段、语义泄漏、仓库恢复、许可证、跨来源近重复审计。
 - Backlog：真实资产接入后审核 revision/许可/描述与恢复状态，C-07 去重另轮执行。
+
+## C-07 确定性去重与划分（2026-11-13）
+- Stage 1 / C；未提交、未推送。
+- 新增 data/dedupe.py、tests/test_data_dedupe.py；仅追加本交接。
+- 未修改 Contracts、C-06、既有执行模块；无网络、下载、embedding 或语义模型。
+- 只读 C_CONTEXT_CARD 与 §7.4 指定行段。
+- 测试先写，初次因 dedupe 模块不存在收集失败；随后实现并验证。
+- 输入 C-06 private_index 的 bytes/行列表；公开六字段清单不含所需仓库/源码信息。
+- 输出 duplicates、candidates、assignments、conflicts 与 version=1。
+- 源 ID、内容 hash、同 task_id 判重；保留全部输入，不自动删除或选代表题。
+- MBPP 与 MBPP+ 共用原始 ID 命名空间，跨源同题可判重。
+- 内容 hash 根据任务内容计算，不能误用包含 ID/split 的公开 provenance hash。
+- AST 归一化、函数签名、描述模板仅产生 pending 人工复核候选。
+- 未将候选重复当成语义等价，不基于候选项自动合并 split。
+- 仓库名大小写/URL/.git 归一；fork/重命名 aliases 及 image_aliases 由可信宿主提供。
+- 身份表做传递归并；不凭未知镜像名猜仓库，不凭拼写相似猜 fork。
+- 未提供的 fork/镜像关联仍待身份审核，纯离线规则无法发现未知上游关系。
+- 仓库族、问题族及确切重复构成连通分组，整体处理 train/dev/test 约束。
+- 继承 C-06 task.task_family 作为默认问题族，可提供 task.problem_family。
+- 已指定 split 保留；同组跨 split 输出完整冲突，assignment.split=null，不删题。
+- frozen=True 时有冲突抛 FrozenConflict，异常携带完整 report，不能吞掉。
+- smoke 视为未划分；无既有约束组按 SHA256 8/1/1 桶分配，非随机采样。
+- 该桶规则仅为确定性默认政策，不保证实际比例或满足冻结题量，正式政策仍需审核。
+- 输入行先 canonical JSON 排序；身份与组代表稳定，打乱顺序输出一致。
+- 新增 11 测试：同内容/改名、近似不同题、跨源同仓库、fork、镜像、跨 split、
+  源 ID、问题族、打乱顺序、未划分、冻结冲突与保留、重复输入不删除。
+- 用 C-06 ingest 生成每来源两行仓库合成清单；函数样例为合成私有清单扩展。
+- 专项 11 passed；离线全量 141 passed、38 skipped，2.47 秒。
+- Ruff check 全部通过；format --check 20 files already formatted；diff --check 通过。
+- 38 skip 沿用 36 Docker opt-in + 2 Windows 符号链接，本轮未重新验证容器。
+- 未验证：正式数据规模性能、人工语义复核、未登记 fork/别名、预训练污染。
+- Backlog：审核身份表和问题族标签；大规模候选生成优化及冻结划分政策审核。
