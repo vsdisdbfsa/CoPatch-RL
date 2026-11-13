@@ -1,78 +1,75 @@
 ﻿# Stage 1 · C 交接
 
+## 1. 基本信息
 - stage / owner / branch: Stage 1 / C / stage1/c-eval
-- base_commit: 55de863 · final_commit: 22096e6
-- 是否下载模型/数据：否（仅用已有开发镜像 copatch-public-pytest:dev）
-- 证据命令：见文末"复现命令"
+- base_commit: 55de863
+- final_commit: 17f2450
+- 是否下载模型/数据: 否（仅本地开发镜像 copatch-public-pytest:dev；无正式镜像、无权重、无原始数据）
 
-## C-01 ~ C-03 执行底座
-files: execution/{workspace,sandbox,repository_tests}.py + 4 个 test_execution_* 文件
-tests: 61 collected（含 11 容器）
-unverified: 2 项 Windows 符号链接权限
+## 2. 目标与实际完成范围
+- 目标：完成 execution / data / evaluation 三块全部代码，用 Mock 与手写 fixture 验收，不做真实训练与评测。
+- 完成：16 个模块文件、18 个测试文件、303 条用例；代码无空壳，未改 Contracts 与 A/B 目录。
+- 未完成：见第 6 节。
 
-## C-04 公开测试
-files: execution/public_tests.py, examples/dev/public_repository/
-tests: 全量 98/31 (default) · 127/2 (DOCKER=1) · 129 collected
-unverified: 仓库报告可信边界（pytest 同进程）→ 只能 diagnostic_only
-pending A/B: PublicResult 公共化、Observation 映射、未知 suite → PERMISSION_DENIED
+## 3. 修改文件清单（仅 C 归属目录）
+| 目录 | 文件 | 内部任务 | commit |
+|---|---|---|---|
+| execution/ | workspace.py, sandbox.py, public_tests.py, repository_tests.py | C-01~C-04 | 27f1ed0 |
+| execution/ | grader.py | C-05 | 3ccc8e7 |
+| execution/ | fixtures.py, examples/dev/count_positive/ | C-14 | 17f2450 |
+| data/ | ingest.py | C-06 | c96e5e1 |
+| data/ | dedupe.py | C-07 | 857ec07 |
+| data/ | validate.py | C-08 | 22096e6 |
+| data/ | trajectories.py | C-09 | 4805f45 |
+| evaluation/ | conditions.py | C-10 | 787153e |
+| evaluation/ | runner.py | C-11 | 3213b68 |
+| evaluation/ | metrics.py | C-12 | 8b9c0de（+ bda9d31 格式） |
+| evaluation/ | reports.py | C-13 | 170197e |
 
-## C-05 独立评分
-files: execution/grader.py, tests/test_execution_grader.py, tests/fixtures/private/
-tests: 19 = 12 逻辑 + 7 容器 · 全量 146/2
-unverified: 仓库可信成功（本轮不产出 SUCCESS）
-backlog: 快照持久化、跨进程评分边界
+未修改：contracts.py、pyproject.toml、uv.lock、tests/conftest.py、tests/test_contracts.py、A/B 目录。
 
-## C-06 三源导入
-files: data/ingest.py, tests/test_data_ingest.py
-tests: 20 passed
-key: 公开清单六字段白名单；SWE-smith patch=注错；SWE-Gym 固定 pending
+## 4. 新增或更改接口
+- 新增 C 内部类型（均未进 Contracts，未修改 v1）：
+  PublicResult、RepositorySuite、RepositoryDiagnostic、IngestResult、SplitPolicy、
+  TaskRecord、Summary、Validation、Event、Report 六件产物格式。
+- 无公共契约变更。需要 A/B 确认的接口请求见第 7 节。
 
-## C-07 去重与划分
-files: data/dedupe.py, tests/test_data_dedupe.py
-tests: 12 passed
-key: 默认 SplitPolicy(7/1/2)，与实际比例待 A 冻结
+## 5. 实际验证命令与退出码
+| 命令 | 结果 |
+|---|---|
+| `.\.venv\Scripts\python.exe -m pytest -q` | 259 passed, 44 skipped（42 Docker opt-in + 2 Windows 符号链接） |
+| `$env:COPATCH_DOCKER_TESTS='1'; 同上` | 259 passed, 2 skipped |
+| `pytest --collect-only -q` | 303 条用例 |
+| `ruff check src tests` | 退出码 0 |
+| `ruff format --check src tests` | 34 files already formatted |
 
-## C-08 题目校验
-files: data/validate.py, tests/test_data_validate.py
-tests: 19 = 14 逻辑 + 5 容器 · 全量 197/2
-unverified: 真实许可/依赖、语义题意、真实仓库恢复
+全部为 Mock / 手写 fixture 证据；无 Local、无 Hybrid、无真实模型调用。
 
-## 复现命令
-.\.venv\Scripts\python.exe -m pytest -q                    → 156 passed, 43 skipped
-$env:COPATCH_DOCKER_TESTS='1'; 同上                        → 197 passed, 2 skipped
-uv run ruff check src tests / format --check               → 退出码 0
-## C-09 轨迹校验（2026-11-13）
-- 新增 data/trajectories.py、tests/test_data_trajectories.py；只校验，不生产轨迹/标签/mask，不改 Contracts/Event Store；未提交、未推送。
-- 校验配对/顺序/时间、episode 身份、可信 workspace 历史 hash、旧/未来反馈、Main 标签、同题同策略同初态 G=4 独立 workspace；fixture 全部 synthetic。
-- token/logprob/mask 任一缺失标 unavailable，保留原输入不填零；字段存在不代表真实采样已验证。
-- 待 B 对齐（唯一 adapt_event）：event_id/kind/sequence/timestamp/episode_id/task_id/workspace_id/group_id/policy_version/initial_hash/role/code_hash/action_id/visible_observation_ids/synthetic/input_ids/generated_ids/old_logprobs/loss_mask，以及独立可信 (episode,sequence)→workspace hash 历史。
-- 先写失败用例，初次缺模块收集失败；专项 19 passed；离线全量 175 passed、43 skipped（41 Docker opt-in+2符号链接），Ruff/格式检查通过。
-- 未验证/Backlog：B 真实事件适配、可信历史来源、真实采样来源与跨模块联调；synthetic 校验通过不能用于宣称正式 SFT/GRPO 数据合格。
-## C-10 四组条件
-files: evaluation/conditions.py, tests/test_eval_conditions.py
-tests: 31 passed · 全量 206/43
-key: C/D 仅 Main LoRA 可不同；缺版本或预算显式失败；离线不注册 ask_user
+## 6. 阻塞问题与已知风险
+1. 仓库级独立评分不可信：pytest 与候选同进程，报告可被内省；本轮一律 diagnostic_only，不产出 SUCCESS。
+2. 三类资产 Manifest 仅实现"任务"一类；SFT 与 GRPO 无真实轨迹，未做登记（字段格式已按 §7.4 设计）。
+3. 报告分层按"每个 condition 一份"实现，未在单份报告内按 layer/mode 拆分。
+4. 快照持久化与重启恢复未实现；当前仅内存内快照与提交重放。
+5. 未与 B 的真实 Harness 联调（runner 只接注入的 Mock harness）。
+6. 报告图表未实现；绘图依赖需 A 批准后方可加入。
+7. 2 项 Windows 符号链接测试因本机权限跳过。
 
-## C-11 批跑与恢复
-files: evaluation/runner.py, tests/test_eval_runner.py
-tests: 17 passed · 全量 223/43
-key: attempt journal 幂等，恢复不重跑；INFRA 只在显式策略下重试；report 只计最后一次 attempt
-unverified: B 真实 Harness 联调、真实成本字段、SQLite 索引重建
+## 7. 接口请求（待 A/B 确认）
+A：
+1. `PublicResult` 是否提升为公共契约；当前为 C 内部 dataclass。
+2. 仓库级 TaskSpec 扩展是否以关联 Manifest 承载（当前不改 public_view）。
+3. 是否批准 matplotlib 作为报告绘图依赖。
+B：
+1. 未知 workspace / suite 建议返回 `PERMISSION_DENIED`（C 内部已按此实现）。
+2. `Observation` 如何承载 `code_hash=None`，不得用当前 hash 顶替。
+3. C-09 事件信封需与 B 的 Event Store 字段对齐（清单见 `data/trajectories.py` 的 `adapt_event`）。
+4. `EvaluationRunner` 需要 B 提供 `run_episode(condition, task, seed) -> Outcome` 注入点。
 
-## C-12 指标与统计
-files: evaluation/metrics.py, tests/test_eval_metrics.py
-tests: 17 passed · 全量 240/43
-key: 零分母记 NA 不记 0；INFRA 不进模型失败分母；缺费用不填 0；按族配对 bootstrap
-unverified: 真实事件字段映射、D/C 实际配对数据
+## 8. 证据路径
+- 本文件
+- `tests/` 下 18 个测试文件（执行/数据/评测/集成）
+- `examples/dev/count_positive/`：初态含边界缺陷，公开测试可复现失败
 
-## C-13 报告
-files: evaluation/reports.py, tests/test_eval_reports.py
-tests: 14 passed · 全量 254/43
-key: 六件产物确定性可复现；Mock 醒目标记；protocol 自动过滤 private/secret/patch 等键
-unverified: 图表（需 A 批准绘图依赖）、真实 run 的 protocol 字段
-
-## C-14 联调与交付
-files: execution/fixtures.py, examples/dev/count_positive/*, tests/test_stage1_integration.py
-tests: 6 = 5 静态 + 1 容器（opt-in）· 全量 259/44
-key: 示例初态缺陷→公开失败→修复→提交冻结→独立评分 SUCCESS；public_view 不含宿主字段
-unverified: B 真实 Harness 联调、仓库级示例、PR 未开
+## 附：内部任务拆分说明
+C-01 ~ C-14 是按方案 §18.3 的 C 完成清单拆出的执行单元，我个人做的任务拆分，不是方案的 Stage；
+与模块、commit 的对应关系见第 3 节。每步的细节保留在各 commit message 中。
