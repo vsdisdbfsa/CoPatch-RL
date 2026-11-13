@@ -64,3 +64,9 @@ files: evaluation/metrics.py, tests/test_eval_metrics.py
 tests: 17 passed · 全量 240/43
 key: 零分母记 NA 不记 0；INFRA 不进模型失败分母；缺费用不填 0；按族配对 bootstrap
 unverified: 真实事件字段映射、D/C 实际配对数据
+
+## C-13 报告
+files: evaluation/reports.py, tests/test_eval_reports.py
+tests: 14 passed · 全量 254/43
+key: 六件产物确定性可复现；Mock 醒目标记；protocol 自动过滤 private/secret/patch 等键
+unverified: 图表（需 A 批准绘图依赖）、真实 run 的 protocol 字段
