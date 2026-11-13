@@ -93,3 +93,38 @@
 - 38 skip 沿用 36 Docker opt-in + 2 Windows 符号链接，本轮未重新验证容器。
 - 未验证：正式数据规模性能、人工语义复核、未登记 fork/别名、预训练污染。
 - Backlog：审核身份表和问题族标签；大规模候选生成优化及冻结划分政策审核。
+
+## C-08 可信数据质量验收（2026-11-13）
+- Stage 1 / C；仅新增 data/validate.py、tests/test_data_validate.py，追加本记录。
+- 未改 Contracts、C-06/C-07 或执行模块；未提交、未推送。
+- 只读上下文卡和指定 §6.7/7.5/7.6；无真实数据/正式镜像下载。
+- 接收 C-06 宿主 record、C-07 单条 assignment 与可信 QA Assets。
+- 输出 Validation(decision=accept/quarantine, reasons, stages)，原因码不回传源码。
+- 静态核对 TaskSpec schema、task/split 关联、许可登记、审核状态、允许路径。
+- 核对私有 suite 引用及测试 hash、固定 F2P/P2P ID 集和快照 ID/hash/可用性。
+- 平台要求 linux/amd64，实际执行平台/镜像 ID 再核对；依赖 hash 和 runner 版本必填。
+- 许可和依赖实际内容由宿主审核登记；这里验证元数据，不冒称联网审计。
+- 题面含已知参考源码/补丁/用例或显式泄漏标记则 DESCRIPTION_LEAK。
+- 字符串筛查不能证明无语义泄漏；description_reviewed 必须显式为 True。
+- trusted_implementations 必须由宿主审核确认；不接受模型候选或未知来源源码。
+- 动态在独立 Docker 副本运行宿主手写缺陷态、参考态和错误反例。
+- 缺陷态 F2P 必须实际断言失败且 P2P 通过；参考态完整通过且 P2P 不回归。
+- 每个错误反例至少一个真实断言失败；跳过/xfail/收集故障不能代替实际失败。
+- 复用低层 Sandbox 和 pytest 阶段解析；未改变 C-04 diagnostic_only 候选结论。
+- QA 容器仅有可信实现及测试，因此可将真实完整通过作为数据接收证据。
+- 禁止把此 QA 入口用于候选评分或将私有测试投放到 Agent 工作区。
+- 静态原因含 INVALID_SCHEMA、SPLIT_CONFLICT、LICENSE_MISSING、AUDIT_PENDING、
+  SUITE_REFERENCE_MISMATCH、EMPTY_SUITE、MISSING_CASE、HASH_MISMATCH、
+  SNAPSHOT_UNAVAILABLE、DESCRIPTION_LEAK、PLATFORM_MISMATCH 等。
+- 动态原因含 DEFECT_NOT_FAILING、REFERENCE_FAILED、P2P_REGRESSION、
+  P2P_BASELINE_FAILED、COUNTEREXAMPLE_NOT_CAUGHT、DYNAMIC_TIMEOUT、TEST_INFRA_ERROR 等。
+- 先写九类拒收测试；实现前因模块不存在收集失败，随后实现。
+- 专项 19 passed：14 项逻辑/Mock，5 项真实 Docker，11.92 秒。
+- 真实 Docker 包括正确接收、缺陷未失败、参考失败、P2P 回归、错误反例漏检。
+- 每个真实用例检查无遗留命名容器；使用已有 copatch-public-pytest:dev，不下载镜像。
+- COPATCH_DOCKER_TESTS=1；全量 197 passed、2 skipped，51.61 秒。
+- python -m pytest -q、Ruff check、format --check、git diff --check 均退出 0。
+- 格式检查 22 files already formatted；2 skip 仍为宿主 Windows 符号链接权限。
+- 未验证：真实数据许可/依赖真实性、语义题意、实际仓库 checkout 恢复和随机性。
+- 当前“可恢复”仅验证注入内存快照完整且能形成执行副本，不是持久化灾难恢复。
+- Backlog：真实资产审核、多次稳定性验证和真实恢复预检；候选可信评分边界另轮处理。
