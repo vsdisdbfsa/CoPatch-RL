@@ -1,130 +1,43 @@
-﻿
-## C-05 增补（2026-11-12）
-- Stage 1 / C / stage1/c-eval；base 55de863；未提交、未推送。
-- 新增 execution/grader.py、tests/test_execution_grader.py。
-- 新增手写 tests/fixtures/private/grader_cases.json（非正式数据，未被 gitignore）。
-- 未修改 Contracts、C-01～C-04、锁文件或 A/B 模块；未新增 examples 文档。
-- score(snapshot_id, task_id) 仅返回现有 GraderResult 三字段。
-- 注入 Mapping snapshot store；Frozen 注册 task、snapshot、hash、提交标志。
-- 拒绝 task/ID/hash 不匹配、未提交、非规范路径；不实现持久化或重启查找。
-- 宿主必须只注册已冻结且审核为公开源码的 Snapshot；不能把私测加入源码清单。
-- 函数逐输入经 Sandbox Docker 调用；期望值与整套私测留宿主比较。
-- 候选 stdout/stderr 丢弃；独立管道返回不可信函数值，宿主判断而非打印报告。
-- 返回 SUCCESS/TEST_FAILED/INVALID_CODE/TIMEOUT/INFRA_ERROR；细节只在内部 Detail。
-- 仓库注入诊断适配器，仅传公开/上游 node ID；不得将私测脚本交给此适配器。
-- 核对固定 F2P/P2P 集、重复/缺失/收集失败；仅 passed 计实际诊断通过。
-- skip/xfail/xpass/失败不计通过；所有仓库结果最终均 INFRA_ERROR + Diagnostic。
-- 复用 C-04 diagnostic_only 结论，未尝试解决报告边界，不产出仓库 SUCCESS。
-- 先写六失败场景；实现前因 grader 模块不存在收集失败（未冒称六项断言已运行）。
-- 六场景：错 hash、空套件、私测泄漏、回归、超时、基础设施故障。
-- 中间修正 fixture BOM、测试导入和泄漏反例匹配自身标记的问题。
-- 专项最终 19 passed：12 逻辑/Mock，7 Docker 开关集成用例。
-- 7 集成用例中语法错误静态拒绝；其余 6 实际执行容器（含仓库诊断）。
-- 实测正确、错误、死循环、提前退出空值、候选空间无私测、仓库全过仍 Diagnostic。
-- COPATCH_DOCKER_TESTS=1；全量一次：146 passed、2 skipped，40.41s。
-- uv run --locked pytest -q：退出 0；Ruff check 全部通过，format --check 16 文件通过。
-- git diff --check 通过；git check-ignore fixture 退出 1 表示未忽略，非测试失败。
-- 2 skip 仍为 C-01 Windows 符号链接权限，未宣称验证。
-- 镜像复用已存在 python:3.11-slim / copatch-public-pytest:dev；本轮未下载资产。
-- A/B 待确认：只由可信 Trainer/Evaluation 消费 GraderResult；Detail 不回流模型。
-- 未验证：正式数据评分、仓库可信成功、恶意候选对值通道的全面攻击防护。
-- Backlog：快照持久化/重启恢复及仓库跨进程可信评分边界，留待另轮授权。
+﻿# Stage 1 · C 交接
 
-## C-06 离线来源适配（2026-11-13）
-- Stage 1 / C；未提交、未推送。仅 ingest.py、test_data_ingest.py 和本记录。
-- 只读上下文卡及指定 §6.3/7.2/7.4 行段；未联网、未下载或运行真实数据。
-- 测试先写；实现前因 data.ingest 尚不存在而收集失败，随后实现并验证。
-- 每源两行内联合成数据，MBPP/MBPP+ 分别覆盖，不新增 fixture 文件或空模块。
-- 输入原始行、可信宿主 metadata、revision 白名单及许可，输出 TaskSpec v1。
-- 无原始字段的预算、入口、允许文件、快照、suite 引用由宿主显式提供，不猜测。
-- public_view 完全沿用现有契约，没有增加字段，不改 contracts.py。
-- 公开 manifest 仅 task_id/source/revision/license/split/hash 六字段。
-- 私有索引含原始行、参考实现/测试/补丁、恢复信息、审计状态和完整宿主 TaskSpec。
-- code/test_list 不进公开清单和 public_view；初始源码/stub 不由参考解生成。
-- MBPP/MBPP+ 标准化原始 ID（含 Mbpp/11），私有 original_task_id 支持跨来源关联。
-- 来源命名空间避免跨源 task_id 碰撞；同源重复 ID 拒绝，不自动合并或去重。
-- SWE-smith patch 固定 inject_defect；SWE-Gym 固定 repair；方向冲突拒绝。
-- SWE-smith 无 base_commit 保留 commit=null/status=unresolved，不编造。
-- 显式提供的 commit 仅标 unverified，未声称通过恢复或测试核验。
-- SWE-Gym audit_status 始终 pending，即使宿主传 approved 也不升级。
-- formal=True 时拒绝所有 SWE-Gym；其他来源未 approved 同样拒绝。
-- 未知 revision、缺字段、错误类型、空描述、补丁/答案泄漏特征拒绝。
-- 描述需宿主 description_reviewed=True；字符串规则不代替语义泄漏人工审核。
-- revision 白名单及许可为宿主登记输入，本轮没有联网验证来源真实性或许可证。
-- 排序 JSON/键/记录；无时间戳；同输入两次及不同输入顺序输出字节一致。
-- 公开 hash 仅覆盖公开元数据与契约公开视图；私有 raw_hash 单独保管。
-- 参考解变化不改变公开 hash；私有索引变化有对应测试。
-- 新增 20 项 C-06 测试；离线全量 130 passed、38 skipped，2.57s。
-- 38 skip = 36 项 Docker opt-in（遵守本轮不联网/纯数据范围）+ 2 原有符号链接。
-- 本轮未重跑 Docker；沿用历史证据，不声称此次容器验证。
-- .venv/Scripts/python.exe -m pytest -q：退出 0。
-- Ruff check 全部通过；format --check 18 files already formatted；diff --check 通过。
-- 未验证：真实来源版本字段、语义泄漏、仓库恢复、许可证、跨来源近重复审计。
-- Backlog：真实资产接入后审核 revision/许可/描述与恢复状态，C-07 去重另轮执行。
+- stage / owner / branch: Stage 1 / C / stage1/c-eval
+- base_commit: 55de863 · final_commit: 22096e6
+- 是否下载模型/数据：否（仅用已有开发镜像 copatch-public-pytest:dev）
+- 证据命令：见文末"复现命令"
 
-## C-07 确定性去重与划分（2026-11-13）
-- Stage 1 / C；未提交、未推送。
-- 新增 data/dedupe.py、tests/test_data_dedupe.py；仅追加本交接。
-- 未修改 Contracts、C-06、既有执行模块；无网络、下载、embedding 或语义模型。
-- 只读 C_CONTEXT_CARD 与 §7.4 指定行段。
-- 测试先写，初次因 dedupe 模块不存在收集失败；随后实现并验证。
-- 输入 C-06 private_index 的 bytes/行列表；公开六字段清单不含所需仓库/源码信息。
-- 输出 duplicates、candidates、assignments、conflicts 与 version=1。
-- 源 ID、内容 hash、同 task_id 判重；保留全部输入，不自动删除或选代表题。
-- MBPP 与 MBPP+ 共用原始 ID 命名空间，跨源同题可判重。
-- 内容 hash 根据任务内容计算，不能误用包含 ID/split 的公开 provenance hash。
-- AST 归一化、函数签名、描述模板仅产生 pending 人工复核候选。
-- 未将候选重复当成语义等价，不基于候选项自动合并 split。
-- 仓库名大小写/URL/.git 归一；fork/重命名 aliases 及 image_aliases 由可信宿主提供。
-- 身份表做传递归并；不凭未知镜像名猜仓库，不凭拼写相似猜 fork。
-- 未提供的 fork/镜像关联仍待身份审核，纯离线规则无法发现未知上游关系。
-- 仓库族、问题族及确切重复构成连通分组，整体处理 train/dev/test 约束。
-- 继承 C-06 task.task_family 作为默认问题族，可提供 task.problem_family。
-- 已指定 split 保留；同组跨 split 输出完整冲突，assignment.split=null，不删题。
-- frozen=True 时有冲突抛 FrozenConflict，异常携带完整 report，不能吞掉。
-- smoke 视为未划分；无既有约束组按 SHA256 8/1/1 桶分配，非随机采样。
-- 该桶规则仅为确定性默认政策，不保证实际比例或满足冻结题量，正式政策仍需审核。
-- 输入行先 canonical JSON 排序；身份与组代表稳定，打乱顺序输出一致。
-- 新增 11 测试：同内容/改名、近似不同题、跨源同仓库、fork、镜像、跨 split、
-  源 ID、问题族、打乱顺序、未划分、冻结冲突与保留、重复输入不删除。
-- 用 C-06 ingest 生成每来源两行仓库合成清单；函数样例为合成私有清单扩展。
-- 专项 11 passed；离线全量 141 passed、38 skipped，2.47 秒。
-- Ruff check 全部通过；format --check 20 files already formatted；diff --check 通过。
-- 38 skip 沿用 36 Docker opt-in + 2 Windows 符号链接，本轮未重新验证容器。
-- 未验证：正式数据规模性能、人工语义复核、未登记 fork/别名、预训练污染。
-- Backlog：审核身份表和问题族标签；大规模候选生成优化及冻结划分政策审核。
+## C-01 ~ C-03 执行底座
+files: execution/{workspace,sandbox,repository_tests}.py + 4 个 test_execution_* 文件
+tests: 61 collected（含 11 容器）
+unverified: 2 项 Windows 符号链接权限
 
-## C-08 可信数据质量验收（2026-11-13）
-- Stage 1 / C；仅新增 data/validate.py、tests/test_data_validate.py，追加本记录。
-- 未改 Contracts、C-06/C-07 或执行模块；未提交、未推送。
-- 只读上下文卡和指定 §6.7/7.5/7.6；无真实数据/正式镜像下载。
-- 接收 C-06 宿主 record、C-07 单条 assignment 与可信 QA Assets。
-- 输出 Validation(decision=accept/quarantine, reasons, stages)，原因码不回传源码。
-- 静态核对 TaskSpec schema、task/split 关联、许可登记、审核状态、允许路径。
-- 核对私有 suite 引用及测试 hash、固定 F2P/P2P ID 集和快照 ID/hash/可用性。
-- 平台要求 linux/amd64，实际执行平台/镜像 ID 再核对；依赖 hash 和 runner 版本必填。
-- 许可和依赖实际内容由宿主审核登记；这里验证元数据，不冒称联网审计。
-- 题面含已知参考源码/补丁/用例或显式泄漏标记则 DESCRIPTION_LEAK。
-- 字符串筛查不能证明无语义泄漏；description_reviewed 必须显式为 True。
-- trusted_implementations 必须由宿主审核确认；不接受模型候选或未知来源源码。
-- 动态在独立 Docker 副本运行宿主手写缺陷态、参考态和错误反例。
-- 缺陷态 F2P 必须实际断言失败且 P2P 通过；参考态完整通过且 P2P 不回归。
-- 每个错误反例至少一个真实断言失败；跳过/xfail/收集故障不能代替实际失败。
-- 复用低层 Sandbox 和 pytest 阶段解析；未改变 C-04 diagnostic_only 候选结论。
-- QA 容器仅有可信实现及测试，因此可将真实完整通过作为数据接收证据。
-- 禁止把此 QA 入口用于候选评分或将私有测试投放到 Agent 工作区。
-- 静态原因含 INVALID_SCHEMA、SPLIT_CONFLICT、LICENSE_MISSING、AUDIT_PENDING、
-  SUITE_REFERENCE_MISMATCH、EMPTY_SUITE、MISSING_CASE、HASH_MISMATCH、
-  SNAPSHOT_UNAVAILABLE、DESCRIPTION_LEAK、PLATFORM_MISMATCH 等。
-- 动态原因含 DEFECT_NOT_FAILING、REFERENCE_FAILED、P2P_REGRESSION、
-  P2P_BASELINE_FAILED、COUNTEREXAMPLE_NOT_CAUGHT、DYNAMIC_TIMEOUT、TEST_INFRA_ERROR 等。
-- 先写九类拒收测试；实现前因模块不存在收集失败，随后实现。
-- 专项 19 passed：14 项逻辑/Mock，5 项真实 Docker，11.92 秒。
-- 真实 Docker 包括正确接收、缺陷未失败、参考失败、P2P 回归、错误反例漏检。
-- 每个真实用例检查无遗留命名容器；使用已有 copatch-public-pytest:dev，不下载镜像。
-- COPATCH_DOCKER_TESTS=1；全量 197 passed、2 skipped，51.61 秒。
-- python -m pytest -q、Ruff check、format --check、git diff --check 均退出 0。
-- 格式检查 22 files already formatted；2 skip 仍为宿主 Windows 符号链接权限。
-- 未验证：真实数据许可/依赖真实性、语义题意、实际仓库 checkout 恢复和随机性。
-- 当前“可恢复”仅验证注入内存快照完整且能形成执行副本，不是持久化灾难恢复。
-- Backlog：真实资产审核、多次稳定性验证和真实恢复预检；候选可信评分边界另轮处理。
+## C-04 公开测试
+files: execution/public_tests.py, examples/dev/public_repository/
+tests: 全量 98/31 (default) · 127/2 (DOCKER=1) · 129 collected
+unverified: 仓库报告可信边界（pytest 同进程）→ 只能 diagnostic_only
+pending A/B: PublicResult 公共化、Observation 映射、未知 suite → PERMISSION_DENIED
+
+## C-05 独立评分
+files: execution/grader.py, tests/test_execution_grader.py, tests/fixtures/private/
+tests: 19 = 12 逻辑 + 7 容器 · 全量 146/2
+unverified: 仓库可信成功（本轮不产出 SUCCESS）
+backlog: 快照持久化、跨进程评分边界
+
+## C-06 三源导入
+files: data/ingest.py, tests/test_data_ingest.py
+tests: 20 passed
+key: 公开清单六字段白名单；SWE-smith patch=注错；SWE-Gym 固定 pending
+
+## C-07 去重与划分
+files: data/dedupe.py, tests/test_data_dedupe.py
+tests: 12 passed
+key: 默认 SplitPolicy(7/1/2)，与实际比例待 A 冻结
+
+## C-08 题目校验
+files: data/validate.py, tests/test_data_validate.py
+tests: 19 = 14 逻辑 + 5 容器 · 全量 197/2
+unverified: 真实许可/依赖、语义题意、真实仓库恢复
+
+## 复现命令
+.\.venv\Scripts\python.exe -m pytest -q                    → 156 passed, 43 skipped
+$env:COPATCH_DOCKER_TESTS='1'; 同上                        → 197 passed, 2 skipped
+uv run ruff check src tests / format --check               → 退出码 0
