@@ -70,3 +70,9 @@ files: evaluation/reports.py, tests/test_eval_reports.py
 tests: 14 passed · 全量 254/43
 key: 六件产物确定性可复现；Mock 醒目标记；protocol 自动过滤 private/secret/patch 等键
 unverified: 图表（需 A 批准绘图依赖）、真实 run 的 protocol 字段
+
+## C-14 联调与交付
+files: execution/fixtures.py, examples/dev/count_positive/*, tests/test_stage1_integration.py
+tests: 6 = 5 静态 + 1 容器（opt-in）· 全量 259/44
+key: 示例初态缺陷→公开失败→修复→提交冻结→独立评分 SUCCESS；public_view 不含宿主字段
+unverified: B 真实 Harness 联调、仓库级示例、PR 未开

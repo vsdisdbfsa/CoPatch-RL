@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task_id": "dev_count_positive_001",
+  "split": "dev",
+  "task_family": "count_positive",
+  "difficulty": "easy",
+  "kind": "function_impl",
+  "source_revision": "handwritten-v1",
+  "description": "统计有限实数列表中严格大于 0 的元素个数，空列表返回 0。",
+  "entrypoint": "solution:count_positive",
+  "allowed_files": ["solution.py"],
+  "initial_snapshot": "examples/dev/count_positive/snapshot",
+  "public_suite_id": "public/dev_count_positive_001",
+  "private_suite_id": "private/dev_count_positive_001",
+  "budget": {
+    "max_main_steps": 8,
+    "max_sub_calls": 4,
+    "max_public_tests": 2,
+    "max_code_revisions": 2,
+    "max_generated_tokens": 6000,
+    "wall_time_seconds": 180
+  }
+}

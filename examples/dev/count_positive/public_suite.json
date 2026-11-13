@@ -1,0 +1,10 @@
+{
+  "suite_id": "public/dev_count_positive_001",
+  "task_id": "dev_count_positive_001",
+  "source_path": "solution.py",
+  "function": "count_positive",
+  "cases": [
+    {"case_id": "mixed", "args_json": "[[1, 0, -2, 3.5]]", "expected_json": "2"},
+    {"case_id": "empty", "args_json": "[[]]", "expected_json": "0"}
+  ]
+}
