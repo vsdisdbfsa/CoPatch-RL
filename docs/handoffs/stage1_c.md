@@ -58,3 +58,9 @@ files: evaluation/runner.py, tests/test_eval_runner.py
 tests: 17 passed · 全量 223/43
 key: attempt journal 幂等，恢复不重跑；INFRA 只在显式策略下重试；report 只计最后一次 attempt
 unverified: B 真实 Harness 联调、真实成本字段、SQLite 索引重建
+
+## C-12 指标与统计
+files: evaluation/metrics.py, tests/test_eval_metrics.py
+tests: 17 passed · 全量 240/43
+key: 零分母记 NA 不记 0；INFRA 不进模型失败分母；缺费用不填 0；按族配对 bootstrap
+unverified: 真实事件字段映射、D/C 实际配对数据
