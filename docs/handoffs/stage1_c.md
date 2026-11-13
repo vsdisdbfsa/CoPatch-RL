@@ -29,3 +29,35 @@
 - A/B 待确认：只由可信 Trainer/Evaluation 消费 GraderResult；Detail 不回流模型。
 - 未验证：正式数据评分、仓库可信成功、恶意候选对值通道的全面攻击防护。
 - Backlog：快照持久化/重启恢复及仓库跨进程可信评分边界，留待另轮授权。
+
+## C-06 离线来源适配（2026-11-13）
+- Stage 1 / C；未提交、未推送。仅 ingest.py、test_data_ingest.py 和本记录。
+- 只读上下文卡及指定 §6.3/7.2/7.4 行段；未联网、未下载或运行真实数据。
+- 测试先写；实现前因 data.ingest 尚不存在而收集失败，随后实现并验证。
+- 每源两行内联合成数据，MBPP/MBPP+ 分别覆盖，不新增 fixture 文件或空模块。
+- 输入原始行、可信宿主 metadata、revision 白名单及许可，输出 TaskSpec v1。
+- 无原始字段的预算、入口、允许文件、快照、suite 引用由宿主显式提供，不猜测。
+- public_view 完全沿用现有契约，没有增加字段，不改 contracts.py。
+- 公开 manifest 仅 task_id/source/revision/license/split/hash 六字段。
+- 私有索引含原始行、参考实现/测试/补丁、恢复信息、审计状态和完整宿主 TaskSpec。
+- code/test_list 不进公开清单和 public_view；初始源码/stub 不由参考解生成。
+- MBPP/MBPP+ 标准化原始 ID（含 Mbpp/11），私有 original_task_id 支持跨来源关联。
+- 来源命名空间避免跨源 task_id 碰撞；同源重复 ID 拒绝，不自动合并或去重。
+- SWE-smith patch 固定 inject_defect；SWE-Gym 固定 repair；方向冲突拒绝。
+- SWE-smith 无 base_commit 保留 commit=null/status=unresolved，不编造。
+- 显式提供的 commit 仅标 unverified，未声称通过恢复或测试核验。
+- SWE-Gym audit_status 始终 pending，即使宿主传 approved 也不升级。
+- formal=True 时拒绝所有 SWE-Gym；其他来源未 approved 同样拒绝。
+- 未知 revision、缺字段、错误类型、空描述、补丁/答案泄漏特征拒绝。
+- 描述需宿主 description_reviewed=True；字符串规则不代替语义泄漏人工审核。
+- revision 白名单及许可为宿主登记输入，本轮没有联网验证来源真实性或许可证。
+- 排序 JSON/键/记录；无时间戳；同输入两次及不同输入顺序输出字节一致。
+- 公开 hash 仅覆盖公开元数据与契约公开视图；私有 raw_hash 单独保管。
+- 参考解变化不改变公开 hash；私有索引变化有对应测试。
+- 新增 20 项 C-06 测试；离线全量 130 passed、38 skipped，2.57s。
+- 38 skip = 36 项 Docker opt-in（遵守本轮不联网/纯数据范围）+ 2 原有符号链接。
+- 本轮未重跑 Docker；沿用历史证据，不声称此次容器验证。
+- .venv/Scripts/python.exe -m pytest -q：退出 0。
+- Ruff check 全部通过；format --check 18 files already formatted；diff --check 通过。
+- 未验证：真实来源版本字段、语义泄漏、仓库恢复、许可证、跨来源近重复审计。
+- Backlog：真实资产接入后审核 revision/许可/描述与恢复状态，C-07 去重另轮执行。
