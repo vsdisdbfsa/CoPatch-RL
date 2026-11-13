@@ -75,24 +75,16 @@ def summarize(records: Sequence[TaskRecord]) -> Summary:
 
     initial_known = [row for row in rows if row.initial_pass is not None]
     fixed = [
-        row
-        for row in initial_known
-        if row.initial_pass is False and row.final_pass is not None
+        row for row in initial_known if row.initial_pass is False and row.final_pass is not None
     ]
     regressed = [
-        row
-        for row in initial_known
-        if row.initial_pass is True and row.final_pass is not None
+        row for row in initial_known if row.initial_pass is True and row.final_pass is not None
     ]
 
     paired = [row for row in evaluated if row.public_pass is not None]
     public_rate = _ratio(sum(1 for row in paired if row.public_pass), len(paired))
     private_rate = _ratio(sum(1 for row in paired if row.final_pass), len(paired))
-    gap = (
-        None
-        if public_rate is None or private_rate is None
-        else public_rate - private_rate
-    )
+    gap = None if public_rate is None or private_rate is None else public_rate - private_rate
 
     costs = [row.cost for row in rows]
     complete_costs = all(cost is not None for cost in costs)
@@ -108,23 +100,15 @@ def summarize(records: Sequence[TaskRecord]) -> Summary:
             sum(1 for row in initial_known if row.initial_pass), len(initial_known)
         ),
         fix_rate=_ratio(sum(1 for row in fixed if row.final_pass), len(fixed)),
-        regression_rate=_ratio(
-            sum(1 for row in regressed if not row.final_pass), len(regressed)
-        ),
+        regression_rate=_ratio(sum(1 for row in regressed if not row.final_pass), len(regressed)),
         invalid_timeout=_ratio(invalid, len(rows)),
         public_private_gap=gap,
-        cost_per_attempt=round(total_cost / len(rows), 6)
-        if complete_costs and rows
-        else None,
-        cost_per_success=(
-            round(total_cost / success, 6) if complete_costs and success else None
-        ),
+        cost_per_attempt=round(total_cost / len(rows), 6) if complete_costs and rows else None,
+        cost_per_success=(round(total_cost / success, 6) if complete_costs and success else None),
     )
 
 
-def by_group(
-    records: Sequence[TaskRecord], key: Callable[[TaskRecord], str]
-) -> dict[str, Summary]:
+def by_group(records: Sequence[TaskRecord], key: Callable[[TaskRecord], str]) -> dict[str, Summary]:
     groups: dict[str, list[TaskRecord]] = {}
     for record in records:
         groups.setdefault(key(record), []).append(record)
@@ -173,9 +157,7 @@ def paired_family_bootstrap(
 
     observed = sum(diffs) / len(diffs)
     rng = random.Random(seed)
-    samples = sorted(
-        sum(rng.choices(diffs, k=len(diffs))) / len(diffs) for _ in range(draws)
-    )
+    samples = sorted(sum(rng.choices(diffs, k=len(diffs))) / len(diffs) for _ in range(draws))
     low = samples[int(draws * alpha / 2)]
     high = samples[min(draws - 1, int(draws * (1 - alpha / 2)))]
     return round(observed, 6), round(low, 6), round(high, 6)
