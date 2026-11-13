@@ -52,3 +52,9 @@ uv run ruff check src tests / format --check               → 退出码 0
 files: evaluation/conditions.py, tests/test_eval_conditions.py
 tests: 31 passed · 全量 206/43
 key: C/D 仅 Main LoRA 可不同；缺版本或预算显式失败；离线不注册 ask_user
+
+## C-11 批跑与恢复
+files: evaluation/runner.py, tests/test_eval_runner.py
+tests: 17 passed · 全量 223/43
+key: attempt journal 幂等，恢复不重跑；INFRA 只在显式策略下重试；report 只计最后一次 attempt
+unverified: B 真实 Harness 联调、真实成本字段、SQLite 索引重建
