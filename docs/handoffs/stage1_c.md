@@ -48,3 +48,7 @@ uv run ruff check src tests / format --check               → 退出码 0
 - 待 B 对齐（唯一 adapt_event）：event_id/kind/sequence/timestamp/episode_id/task_id/workspace_id/group_id/policy_version/initial_hash/role/code_hash/action_id/visible_observation_ids/synthetic/input_ids/generated_ids/old_logprobs/loss_mask，以及独立可信 (episode,sequence)→workspace hash 历史。
 - 先写失败用例，初次缺模块收集失败；专项 19 passed；离线全量 175 passed、43 skipped（41 Docker opt-in+2符号链接），Ruff/格式检查通过。
 - 未验证/Backlog：B 真实事件适配、可信历史来源、真实采样来源与跨模块联调；synthetic 校验通过不能用于宣称正式 SFT/GRPO 数据合格。
+## C-10 四组条件
+files: evaluation/conditions.py, tests/test_eval_conditions.py
+tests: 31 passed · 全量 206/43
+key: C/D 仅 Main LoRA 可不同；缺版本或预算显式失败；离线不注册 ask_user
