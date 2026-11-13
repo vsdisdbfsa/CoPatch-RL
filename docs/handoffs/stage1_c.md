@@ -41,3 +41,10 @@ unverified: 真实许可/依赖、语义题意、真实仓库恢复
 .\.venv\Scripts\python.exe -m pytest -q                    → 156 passed, 43 skipped
 $env:COPATCH_DOCKER_TESTS='1'; 同上                        → 197 passed, 2 skipped
 uv run ruff check src tests / format --check               → 退出码 0
+## C-09 轨迹校验（2026-11-13）
+- 新增 data/trajectories.py、tests/test_data_trajectories.py；只校验，不生产轨迹/标签/mask，不改 Contracts/Event Store；未提交、未推送。
+- 校验配对/顺序/时间、episode 身份、可信 workspace 历史 hash、旧/未来反馈、Main 标签、同题同策略同初态 G=4 独立 workspace；fixture 全部 synthetic。
+- token/logprob/mask 任一缺失标 unavailable，保留原输入不填零；字段存在不代表真实采样已验证。
+- 待 B 对齐（唯一 adapt_event）：event_id/kind/sequence/timestamp/episode_id/task_id/workspace_id/group_id/policy_version/initial_hash/role/code_hash/action_id/visible_observation_ids/synthetic/input_ids/generated_ids/old_logprobs/loss_mask，以及独立可信 (episode,sequence)→workspace hash 历史。
+- 先写失败用例，初次缺模块收集失败；专项 19 passed；离线全量 175 passed、43 skipped（41 Docker opt-in+2符号链接），Ruff/格式检查通过。
+- 未验证/Backlog：B 真实事件适配、可信历史来源、真实采样来源与跨模块联调；synthetic 校验通过不能用于宣称正式 SFT/GRPO 数据合格。
