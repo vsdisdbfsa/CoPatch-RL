@@ -3,7 +3,7 @@
 ## 1. 基本信息
 - stage / owner / branch: Stage 1 / C / stage1/c-eval
 - base_commit: 55de863
-- final_commit: 17f2450
+- final_commit: 17f2450（代码最终提交；本文件另有一次 docs commit）
 - 是否下载模型/数据: 否（仅本地开发镜像 copatch-public-pytest:dev；无正式镜像、无权重、无原始数据）
 
 ## 2. 目标与实际完成范围
@@ -37,13 +37,14 @@
 ## 5. 实际验证命令与退出码
 | 命令 | 结果 |
 |---|---|
-| `.\.venv\Scripts\python.exe -m pytest -q` | 259 passed, 44 skipped（42 Docker opt-in + 2 Windows 符号链接） |
-| `$env:COPATCH_DOCKER_TESTS='1'; 同上` | 259 passed, 2 skipped |
+| `.\.venv\Scripts\python.exe -m pytest -q` | 259 passed, 44 skipped（42 Docker opt-in + 2 Windows 符号链接），2.93s |
+| `$env:COPATCH_DOCKER_TESTS='1'; 同上` | 301 passed, 2 skipped，57.95s |
 | `pytest --collect-only -q` | 303 条用例 |
 | `ruff check src tests` | 退出码 0 |
 | `ruff format --check src tests` | 34 files already formatted |
 
 全部为 Mock / 手写 fixture 证据；无 Local、无 Hybrid、无真实模型调用。
+耗时对比（2.93s vs 57.95s）表明 42 条容器用例确实执行，而非被跳过。
 
 ## 6. 阻塞问题与已知风险
 1. 仓库级独立评分不可信：pytest 与候选同进程，报告可被内省；本轮一律 diagnostic_only，不产出 SUCCESS。
@@ -71,5 +72,5 @@ B：
 - `examples/dev/count_positive/`：初态含边界缺陷，公开测试可复现失败
 
 ## 附：内部任务拆分说明
-C-01 ~ C-14 是按方案 §18.3 的 C 完成清单拆出的执行单元，我个人做的任务拆分，不是方案的 Stage；
+C-01 ~ C-14 是我个人按 §18.3 清单拆出的执行单元，不是方案的 Stage；
 与模块、commit 的对应关系见第 3 节。每步的细节保留在各 commit message 中。
