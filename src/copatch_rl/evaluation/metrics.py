@@ -12,7 +12,9 @@ from dataclasses import dataclass
 
 INFRA = "INFRA_ERROR"
 INVALID = frozenset({"INVALID_CODE", "TIMEOUT"})
-STATUSES = ("SUCCESS", "TEST_FAILED", "INVALID_CODE", "TIMEOUT", "INFRA_ERROR")
+GRADER_STATUSES = ("SUCCESS", "TEST_FAILED", "INVALID_CODE", "TIMEOUT", INFRA)
+NOT_SUBMITTED = "NOT_SUBMITTED"
+STATUSES = (*GRADER_STATUSES, NOT_SUBMITTED)
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,8 @@ class TaskRecord:
     final_pass: bool | None
     cost: float | None = None
     public_pass: bool | None = None
+    terminated_by: str | None = None
+    episode_id: str | None = None
 
     @property
     def key(self) -> tuple[str, int]:
@@ -47,6 +51,7 @@ class Summary:
     public_private_gap: float | None
     cost_per_attempt: float | None
     cost_per_success: float | None
+    unknown_cost_rows: int = 0
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:
@@ -105,6 +110,7 @@ def summarize(records: Sequence[TaskRecord]) -> Summary:
         public_private_gap=gap,
         cost_per_attempt=round(total_cost / len(rows), 6) if complete_costs and rows else None,
         cost_per_success=(round(total_cost / success, 6) if complete_costs and success else None),
+        unknown_cost_rows=sum(cost is None for cost in costs),
     )
 
 

@@ -9,15 +9,23 @@ explicit policy, never rewritten into a model failure.
 from __future__ import annotations
 
 import json
+import math
 from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from copatch_rl.contracts import ErrorCode
 from copatch_rl.evaluation.conditions import Condition, TaskEntry
+from copatch_rl.evaluation.metrics import GRADER_STATUSES, NOT_SUBMITTED, STATUSES, TaskRecord
 
-STATUSES = ("SUCCESS", "TEST_FAILED", "INVALID_CODE", "TIMEOUT", "INFRA_ERROR")
 INFRA_ERROR = "INFRA_ERROR"
+_HOST_FAILURES = {
+    ErrorCode.INFRA_ERROR,
+    ErrorCode.API_RATE_LIMIT,
+    ErrorCode.MODEL_ERROR,
+    ErrorCode.TOOL_ERROR,
+}
 
 Key = tuple[str, str, str, int, int]
 
@@ -39,26 +47,64 @@ class Attempt:
 class Outcome:
     """What the injected harness reports after one episode."""
 
-    submitted_snapshot_id: str
+    submitted_snapshot_id: str | None
     initial_hash: str
     terminated_by: str
-    cost: float
+    cost: float | None
     real: bool
+    episode_id: str | None = None
+
+    def ungraded_status(self) -> str | None:
+        """Return the terminal status for an unsubmitted episode."""
+        if self.terminated_by in (ErrorCode.SUBMITTED, "submit"):
+            if not isinstance(self.submitted_snapshot_id, str) or not self.submitted_snapshot_id:
+                raise ValueError("submitted outcome requires a snapshot ID")
+            return None
+        if self.submitted_snapshot_id is not None:
+            raise ValueError("unsubmitted outcome cannot contain a submitted snapshot")
+        reason = ErrorCode(self.terminated_by)
+        if reason in _HOST_FAILURES:
+            return INFRA_ERROR
+        if reason in (ErrorCode.TIMEOUT, ErrorCode.INVALID_CODE):
+            return reason.value
+        return NOT_SUBMITTED
 
 
 @dataclass(frozen=True)
 class Row:
     attempt: Attempt
-    submitted_snapshot_id: str
+    submitted_snapshot_id: str | None
     initial_hash: str
     terminated_by: str
     status: str
-    cost: float
+    cost: float | None
     real: bool
+    episode_id: str | None = None
 
     @property
     def key(self) -> Key:
         return self.attempt.key
+
+    def task_record(
+        self,
+        family: str,
+        *,
+        initial_pass: bool | None = None,
+        public_pass: bool | None = None,
+    ) -> TaskRecord:
+        """Project a journaled attempt into the report's task/seed schema."""
+        return TaskRecord(
+            task_id=self.attempt.task_id,
+            family=family,
+            seed=self.attempt.seed,
+            status=self.status,
+            initial_pass=initial_pass,
+            final_pass=None if self.status == INFRA_ERROR else self.status == "SUCCESS",
+            cost=self.cost,
+            public_pass=public_pass,
+            terminated_by=self.terminated_by,
+            episode_id=self.episode_id,
+        )
 
     def dump(self) -> str:
         return json.dumps(
@@ -74,11 +120,20 @@ class Row:
                 "status": self.status,
                 "cost": self.cost,
                 "real": self.real,
+                **({"episode_id": self.episode_id} if self.episode_id is not None else {}),
             },
             sort_keys=True,
             ensure_ascii=False,
             separators=(",", ":"),
         )
+
+
+def _cost(value: int | float | None) -> float | None:
+    if value is not None and (
+        type(value) not in (int, float) or not math.isfinite(value) or value < 0
+    ):
+        raise ValueError("cost must be a finite nonnegative amount or null")
+    return None if value is None else float(value)
 
 
 def _parse(line: str) -> Row:
@@ -94,14 +149,21 @@ def _parse(line: str) -> Row:
     )
     if data["status"] not in STATUSES:
         raise ValueError("unknown journal status")
+    snapshot_id = data["submitted_snapshot_id"]
+    if snapshot_id is not None and (not isinstance(snapshot_id, str) or not snapshot_id):
+        raise ValueError("invalid submitted snapshot ID")
+    cost = data["cost"]
+    if isinstance(cost, str):
+        cost = float(cost)
     return Row(
         attempt=attempt,
-        submitted_snapshot_id=str(data["submitted_snapshot_id"]),
+        submitted_snapshot_id=snapshot_id,
         initial_hash=str(data["initial_hash"]),
         terminated_by=str(data["terminated_by"]),
         status=str(data["status"]),
-        cost=float(data["cost"]),
+        cost=_cost(cost),
         real=bool(data["real"]),
+        episode_id=data.get("episode_id"),
     )
 
 
@@ -153,7 +215,11 @@ class Report:
     totals: dict[str, int]
     infra_error: int
     mock_rows: int
-    cost: float
+    cost: float | None
+
+    @property
+    def unknown_cost_rows(self) -> int:
+        return sum(row.cost is None for row in self.rows)
 
     @property
     def attempts(self) -> int:
@@ -184,17 +250,28 @@ class Runner:
         self, condition: Condition, task: TaskEntry, seed: int, number: int, run_id: str
     ) -> Row:
         outcome = self._harness(condition, task, seed)
-        status = self._grader(outcome.submitted_snapshot_id, task.task_id)
-        if status not in STATUSES:
-            raise ValueError("unknown grader status: " + str(status))
+        if not isinstance(outcome, Outcome):
+            raise TypeError("harness must return an Outcome")
+        if outcome.initial_hash != task.snapshot_hash or type(outcome.real) is not bool:
+            raise ValueError(
+                "harness outcome does not match the frozen task or provenance contract"
+            )
+        cost = _cost(outcome.cost)
+        status = outcome.ungraded_status()
+        if outcome.submitted_snapshot_id is not None:
+            status = self._grader(outcome.submitted_snapshot_id, task.task_id)
+            if status not in GRADER_STATUSES:
+                raise ValueError("unknown grader status: " + str(status))
+        assert status is not None
         return Row(
             attempt=Attempt(run_id, condition.group, task.task_id, seed, number),
             submitted_snapshot_id=outcome.submitted_snapshot_id,
             initial_hash=outcome.initial_hash,
             terminated_by=outcome.terminated_by,
             status=status,
-            cost=outcome.cost,
+            cost=cost,
             real=outcome.real,
+            episode_id=outcome.episode_id,
         )
 
     def run(
@@ -233,10 +310,13 @@ class Runner:
                 latest[pair] = row
         rows = tuple(sorted(latest.values(), key=lambda r: (r.attempt.task_id, r.attempt.seed)))
         totals = Counter(row.status for row in rows)
+        # The latest row per task/seed drives this report as before. All
+        # billed or unknown retry costs remain in the append-only journal.
+        costs = tuple(row.cost for row in rows if row.cost is not None)
         return Report(
             rows=rows,
             totals={status: totals.get(status, 0) for status in STATUSES},
             infra_error=totals.get(INFRA_ERROR, 0),
             mock_rows=sum(1 for row in rows if not row.real),
-            cost=round(sum(row.cost for row in rows), 6),
+            cost=round(sum(costs), 6) if len(costs) == len(rows) else None,
         )

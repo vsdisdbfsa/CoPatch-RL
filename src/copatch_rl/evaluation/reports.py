@@ -92,7 +92,12 @@ def _scrub(value: object, dropped: set[str]) -> object:
 
 
 def _row(record: TaskRecord) -> dict[str, object]:
-    return {name: getattr(record, name) for name in ROW_FIELDS}
+    row = {name: getattr(record, name) for name in ROW_FIELDS}
+    if record.terminated_by is not None:
+        row["terminated_by"] = record.terminated_by
+    if record.episode_id is not None:
+        row["episode_id"] = record.episode_id
+    return row
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -198,14 +203,16 @@ def write_report(
     lines.append(f"- total: {summary.tasks}")
     lines.append(f"- evaluated: {summary.evaluated}")
     lines.append(f"- infra_error: {summary.infra}")
+    lines.append(f"- unknown cost rows: {summary.unknown_cost_rows}")
     lines.append(f"- failed rows: {len(failed)}")
     lines.append("")
     if failed:
-        lines.append("| task_id | family | seed | status |")
-        lines.append("| --- | --- | --- | --- |")
+        lines.append("| task_id | family | seed | status | terminated_by |")
+        lines.append("| --- | --- | --- | --- | --- |")
         for record in failed:
             lines.append(
-                f"| {record.task_id} | {record.family} | {record.seed} | {record.status} |"
+                f"| {record.task_id} | {record.family} | {record.seed} | "
+                f"{record.status} | {record.terminated_by or ''} |"
             )
     else:
         lines.append("_no failures_")

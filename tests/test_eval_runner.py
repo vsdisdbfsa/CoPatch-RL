@@ -309,3 +309,33 @@ def test_rows_survive_restart(tmp_path):
     assert len(reloaded.rows()) == 4
     assert {row.status for row in reloaded.rows()} == {"SUCCESS"}
     json.loads(reloaded.rows()[0].dump())  # rows stay JSON-serializable
+
+
+def test_unsubmitted_and_unknown_cost_outcomes_survive_journal_reload(tmp_path):
+    graded = []
+
+    def harness(condition, task, seed):
+        submitted = task.task_id == "t2"
+        return Outcome(
+            submitted_snapshot_id="snapshot-t2" if submitted else None,
+            initial_hash=task.snapshot_hash,
+            terminated_by="SUBMITTED" if submitted else "BUDGET_EXHAUSTED",
+            cost=None,
+            real=False,
+            episode_id=f"episode-{task.task_id}",
+        )
+
+    def grade(snapshot_id, task_id):
+        graded.append((snapshot_id, task_id))
+        return "SUCCESS"
+
+    path = tmp_path / "journal.jsonl"
+    report = Runner(harness=harness, grader=grade, journal=Journal(path)).run(_condition(), "fit")
+    assert graded == [("snapshot-t2", "t2")]
+    assert report.attempts == 2 and report.totals["NOT_SUBMITTED"] == 1
+    assert report.unknown_cost_rows == 2 and report.cost is None
+    missed, submitted = Journal(path).rows()
+    assert missed.submitted_snapshot_id is None and missed.cost is None
+    assert missed.episode_id == "episode-t1" and missed.terminated_by == "BUDGET_EXHAUSTED"
+    assert missed.task_record("function").final_pass is False
+    assert submitted.task_record("function").final_pass is True
